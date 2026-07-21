@@ -248,6 +248,25 @@ input[type="range"] {
   min-width: 0;
 }
 
+/* History header: title + clear action on one row (overrides section header grid). */
+.settings-stage > section > header.history-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.history-clear-btn {
+  flex-shrink: 0;
+  color: var(--color-error) !important;
+  border-color: rgb(239 123 118 / 0.38) !important;
+  background: rgb(239 123 118 / 0.08) !important;
+}
+
+.history-clear-btn:hover:not(:disabled) {
+  background: rgb(239 123 118 / 0.16) !important;
+}
+
 .settings-stage > section > header h2,
 .settings-section > header h2 {
   margin: 0;

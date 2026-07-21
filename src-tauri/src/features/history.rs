@@ -109,7 +109,12 @@ pub fn clear() -> OtoResult<()> {
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| OtoError::Message("history lock poisoned".into()))?;
-    save_to(&history_path()?, &[])
+    let path = history_path()?;
+    // Always write an empty list first so readers never see a half-deleted file.
+    save_to(&path, &[])?;
+    // Best-effort remove: if this fails, list() still returns [] from the empty JSON.
+    let _ = fs::remove_file(&path);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -130,5 +135,27 @@ mod tests {
         }];
         save_to(&path, &entries).unwrap();
         assert_eq!(load_from(&path).unwrap(), entries);
+    }
+
+    #[test]
+    fn clear_empties_history_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.json");
+        let entries = vec![HistoryEntry {
+            id: "one".into(),
+            created_at_ms: 1,
+            raw_text: "raw".into(),
+            final_text: "final".into(),
+            mode: "dictation".into(),
+            language: None,
+        }];
+        save_to(&path, &entries).unwrap();
+        assert_eq!(load_from(&path).unwrap().len(), 1);
+
+        // Mirror clear(): write empty, then remove.
+        save_to(&path, &[]).unwrap();
+        assert_eq!(load_from(&path).unwrap(), vec![]);
+        let _ = fs::remove_file(&path);
+        assert_eq!(load_from(&path).unwrap(), vec![]);
     }
 }

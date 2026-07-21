@@ -11,7 +11,8 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
     "app:build": "tauri build --bundles app && bash scripts/sign-app.sh",
-    "app:sign": "bash scripts/sign-app.sh"
+    "app:sign": "bash scripts/sign-app.sh",
+    "app:install": "bash scripts/install-app.sh"
   },
   "license": "Apache-2.0",
   "dependencies": {

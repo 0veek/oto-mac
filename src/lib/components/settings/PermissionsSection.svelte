@@ -283,12 +283,18 @@
       <p class="font-medium text-slate-300">Tips</p>
       <ul class="mt-1.5 list-disc space-y-1 pl-4">
         <li>
-          After enabling a toggle in System Settings, use <strong>Check permissions</strong> (or
-          quit and reopen Oto).
+          Prefer <strong>/Applications/Oto.app</strong>. Do not drag-copy from the build folder —
+          that often breaks the signature so Accessibility never lists Oto. Use
+          <code class="rounded bg-white/5 px-1">npm run app:install</code> from the repo.
         </li>
         <li>
-          Rebuilds can create a new Accessibility entry — remove old <code class="rounded bg-white/5 px-1">oto</code>
-          rows and add the current <strong>Oto.app</strong> with <strong>+</strong>.
+          After enabling a toggle in System Settings, use <strong>Check permissions</strong> (or
+          quit and reopen Oto from Applications).
+        </li>
+        <li>
+          Rebuilds create a new identity — remove old <code class="rounded bg-white/5 px-1">Oto</code>
+          / <code class="rounded bg-white/5 px-1">oto</code> rows, then <strong>+</strong> add
+          <strong>/Applications/Oto.app</strong> only.
         </li>
         <li>
           Insertion needs <strong>Accessibility</strong>. Dictation needs

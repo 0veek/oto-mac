@@ -195,13 +195,32 @@ src-tauri/target/release/bundle/
 
 The included signing script is intended for local development and stable macOS permission identity. It is **not** a substitute for Developer ID signing and notarization when distributing Oto to other people.
 
-To sign an existing local bundle again:
+### Install into `/Applications` (recommended)
+
+**Do not drag-copy** `Oto.app` from the bundle folder into Applications. Finder copies often break the ad-hoc code signature or attach quarantine, so the app launches but never appears under Accessibility / Microphone, or the toggle does nothing.
+
+Use the install helper instead (copies with `ditto`, re-signs **at** `/Applications`, clears quarantine, launches):
+
+```bash
+npm run app:build
+npm run app:install
+```
+
+Re-sign an already-installed app after replacing it manually:
+
+```bash
+npm run app:sign -- /Applications/Oto.app
+```
+
+To sign the build-folder bundle only:
 
 ```bash
 npm run app:sign
 ```
 
 ## macOS permissions
+
+Always grant permissions for **`/Applications/Oto.app`**, not the copy under `target/release/bundle/macos/`. Quit any other Oto process first so only one identity is running.
 
 ### Microphone
 
@@ -217,20 +236,24 @@ The **Test microphone** action records for roughly two seconds, drives the overl
 
 Accessibility access enables reliable hotkey behavior, app activation, simulated paste or typing, selected-text capture, and text insertion:
 
-1. Build or open `Oto.app`. A packaged app has a more stable identity than `target/debug/oto`.
+1. Install with `npm run app:install` (or open a correctly signed `/Applications/Oto.app`).
 2. Open **System Settings → Privacy & Security → Accessibility**.
-3. Unlock the pane, click **+**, and select `Oto.app` if it is not listed automatically.
-4. Turn the Oto toggle on.
-5. Quit and reopen Oto.
+3. Unlock the pane. Remove any stale **Oto** / **oto** rows from older builds.
+4. Click **+**, choose **`/Applications/Oto.app`**, and enable the toggle.
+5. Quit and reopen Oto from Applications.
 
-For a local bundle:
+If the app runs but still will not show in the list:
 
 ```bash
-npm run app:build
-open src-tauri/target/release/bundle/macos/Oto.app
+# From the repo root, after a successful app:build:
+npm run app:install
+# Or only fix the installed copy:
+xattr -cr /Applications/Oto.app
+npm run app:sign -- /Applications/Oto.app
+open /Applications/Oto.app
 ```
 
-Development binaries may appear as lowercase **oto** instead of **Oto**. Rebuilding to a different path can cause macOS to treat the executable as a new permission entry. If access appears enabled but injection still fails, remove stale Oto entries, add the current bundle explicitly, and relaunch it.
+Development binaries may appear as lowercase **oto** instead of **Oto**. Rebuilding or moving the app to a new path creates a new TCC identity. Prefer one stable install location (`/Applications/Oto.app`) and re-sign after every replace.
 
 Depending on the macOS version and chosen delivery path, macOS may also request **Input Monitoring** or **Automation** access. Grant additional access only when prompted and needed for the apps you use.
 
@@ -416,6 +439,8 @@ oto-mac/
 | `npm run build` | Produce the static frontend in `build/`. |
 | `npm run tauri build` | Build the configured native app and DMG. |
 | `npm run app:build` | Build the `.app` bundle and run the local signing helper. |
+| `npm run app:install` | Copy `Oto.app` into `/Applications`, re-sign there, clear quarantine, launch. |
+| `npm run app:sign` | Ad-hoc sign an existing `.app` (pass a path to target `/Applications/Oto.app`). |
 | `npm run app:sign` | Re-sign an existing local `Oto.app`. |
 
 ### Rust checks
