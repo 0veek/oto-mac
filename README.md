@@ -19,6 +19,10 @@ Oto is a native macOS voice-input utility built with Tauri, Rust, and SvelteKit.
 
 This repository is the macOS port of [Oto](https://github.com/0veek/oto), with macOS-specific audio capture, permissions, Keychain storage, focus restoration, text insertion, window materials, and app packaging.
 
+<p align="center">
+  <img src="static/oto-features-bento-light.png" alt="Oto features: system-wide dictation, local or cloud transcription, writing cleanup, Command Mode, personal vocabulary, and local-first privacy" width="100%" />
+</p>
+
 > [!IMPORTANT]
 > Oto is currently at version `0.1.0`. It is usable, but configuration fields, provider behavior, and packaging details may change before a stable release. There is no automatic updater yet.
 
