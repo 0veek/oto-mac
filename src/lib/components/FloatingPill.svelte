@@ -158,8 +158,7 @@
     background: var(--color-overlay-surface);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.13),
-      inset 0 -1px 0 rgb(0 0 0 / 0.2),
-      var(--shadow-overlay);
+      inset 0 -1px 0 rgb(0 0 0 / 0.2);
     backdrop-filter: blur(22px) saturate(135%);
     -webkit-backdrop-filter: blur(22px) saturate(135%);
   }
