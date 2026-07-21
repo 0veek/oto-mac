@@ -1,0 +1,179 @@
+# -----------------------------------------------------------------------------
+# Operating system metadata
+# -----------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+Thumbs.db
+Desktop.ini
+
+# -----------------------------------------------------------------------------
+# Node.js package managers and dependency caches
+# -----------------------------------------------------------------------------
+/node_modules/
+/.npm/
+/.pnpm-store/
+/.yarn/cache/
+/.yarn/install-state.gz
+/.yarn/unplugged/
+*.tsbuildinfo
+
+# Keep dependency lockfiles in Git. They make application builds reproducible.
+
+# -----------------------------------------------------------------------------
+# SvelteKit, Vite, test, and frontend build output
+# -----------------------------------------------------------------------------
+/.svelte-kit/
+/build/
+/dist/
+/.vite/
+/coverage/
+/.nyc_output/
+/playwright-report/
+/test-results/
+/package/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# -----------------------------------------------------------------------------
+# Rust, Cargo, and Tauri output
+# -----------------------------------------------------------------------------
+/target/
+/src-tauri/target/
+/src-tauri/gen/
+**/*.rs.bk
+*.profraw
+perf.data*
+core
+core.*
+
+# Cargo.lock is intentionally committed because Oto is an application.
+
+# Generated platform icon sets that are not used by the macOS bundle.
+/src-tauri/icons/64x64.png
+/src-tauri/icons/Square*.png
+/src-tauri/icons/StoreLogo.png
+/src-tauri/icons/android/
+/src-tauri/icons/ios/
+
+# Native bundles, installers, symbols, and local release directories.
+*.app/
+*.dSYM/
+*.xcarchive/
+*.dmg
+*.pkg
+*.AppImage
+*.deb
+*.rpm
+*.msi
+*.msix
+*.exe
+*.app.tar.gz
+*.sig
+/artifacts/
+/releases-local/
+
+# Xcode user and derived state.
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# -----------------------------------------------------------------------------
+# Local speech models and captured media
+# -----------------------------------------------------------------------------
+/models/
+/model/
+ggml-*.bin
+*.ggml
+*.gguf
+*.onnx
+*.safetensors
+*.wav
+*.aiff
+*.aif
+*.mp3
+*.m4a
+
+# -----------------------------------------------------------------------------
+# Environment files, credentials, certificates, and signing material
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+.envrc
+/.direnv/
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.mobileprovision
+credentials*.json
+secrets*.json
+
+# Local copies of runtime data should never be committed.
+config.json
+history.json
+oto-inject.log
+
+# -----------------------------------------------------------------------------
+# Logs, temporary files, and crash output
+# -----------------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*~
+/.cache/
+/.tmp/
+/tmp/
+/temp/
+
+# -----------------------------------------------------------------------------
+# Editors and local workspace state
+# -----------------------------------------------------------------------------
+*.swp
+*.swo
+*.code-workspace
+/.idea/
+/.vscode/
+/.fleet/
+/.zed/
+
+# -----------------------------------------------------------------------------
+# Local design QA and AI-assisted development artifacts
+# -----------------------------------------------------------------------------
+/.design-qa/
+/design-qa.md
+/.agents/
+/.codex/
+/.claude/
+/.superpowers/
+/.worktrees/
+/graphify-out/
+/.hallmark/
+/.oto-details.md
+/oto-details.md
+
+# -----------------------------------------------------------------------------
+# Packaging experiments from the cross-platform parent project
+# -----------------------------------------------------------------------------
+/.flatpak-build/
+/.flatpak-repo/
+/*.flatpak
