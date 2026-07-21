@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="src-tauri/icons/128x128.png" alt="Oto app icon" width="112" />
+  <img src="static/oto-readme-icon.png" alt="Oto app icon" width="112" />
 
   <h1>Oto for macOS</h1>
 
