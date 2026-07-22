@@ -35,7 +35,7 @@ async-trait = "0.1.91"
 arboard = "3.6.1"
 whisper-rs = "0.16.0"
 core-foundation = "0.10"
-core-graphics = { version = "0.24", features = ["elcapitan", "highsierra"] }
+core-graphics = { version = "0.25", features = ["elcapitan", "highsierra"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSRunningApplication", "NSWorkspace", "NSApplication"] }
 objc2-foundation = { version = "0.3", features = ["NSString", "NSArray"] }
