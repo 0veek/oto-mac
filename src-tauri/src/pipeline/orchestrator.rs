@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
 use tokio::time::{sleep, Duration};
 
 use crate::audio::AudioRecorder;
-use crate::config::{load_config, AppConfig, IdleBehavior, SttBackend};
+use crate::config::{load_config, AppConfig, IdleBehavior, ProviderPreset, SttBackend};
 use crate::error::{OtoError, OtoResult};
 use crate::features::{history, snippets::expand_snippet};
 use crate::injection::{
@@ -28,7 +28,38 @@ async fn client_from_config_async(cfg: &crate::config::AppConfig) -> OtoResult<O
         .map_err(|error| OtoError::Message(format!("credential lookup task failed: {error}")))?
 }
 
+async fn deepgram_from_config_async(
+    cfg: &crate::config::AppConfig,
+) -> OtoResult<crate::providers::DeepgramClient> {
+    let cfg = cfg.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::providers::deepgram::client_from_config(&cfg))
+        .await
+        .map_err(|error| OtoError::Message(format!("credential lookup task failed: {error}")))?
+}
+
+fn is_deepgram(cfg: &AppConfig) -> bool {
+    cfg.provider_preset == ProviderPreset::Deepgram
+}
+
+fn command_mode_client_error(error: &OtoError) -> String {
+    let message = error.to_string();
+    if message.contains("API key not set") {
+        "Command Mode needs an LLM API key to rewrite the selection. Local Whisper and Deepgram only handle speech-to-text — add a key under Providers for an OpenAI-compatible LLM, or use a Custom provider pointed at a local OpenAI-compatible server (localhost needs no key).".into()
+    } else {
+        message
+    }
+}
+
 fn transcription_context(cfg: &AppConfig) -> TranscriptionContext {
+    let keyterms = if cfg.vocabulary_boost {
+        cfg.dictionary
+            .iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    };
     TranscriptionContext {
         language: cfg
             .language
@@ -42,12 +73,17 @@ fn transcription_context(cfg: &AppConfig) -> TranscriptionContext {
         } else {
             None
         },
+        keyterms,
     }
 }
 
 async fn transcribe_from_config(cfg: &AppConfig, wav: &[u8]) -> OtoResult<String> {
     let context = transcription_context(cfg);
     match cfg.stt_backend {
+        SttBackend::Cloud if is_deepgram(cfg) => {
+            let client = deepgram_from_config_async(cfg).await?;
+            client.transcribe(wav, &context).await
+        }
         SttBackend::Cloud => {
             let client = client_from_config_async(cfg).await?;
             client.transcribe(wav, &context).await
@@ -502,13 +538,22 @@ impl Pipeline {
             self.emit(PipelineEvent::Phase {
                 phase: "rewriting selection".into(),
             });
+            if is_deepgram(&cfg) {
+                let message = "Command Mode needs an OpenAI-compatible LLM to rewrite the selection. Deepgram only handles speech-to-text — switch provider under Providers, or disable Command Mode.".into();
+                let error = OtoError::Message(message);
+                self.finish_error(error.to_string()).await;
+                return Err(error);
+            }
             let selected = selected_text
                 .as_deref()
                 .ok_or_else(|| OtoError::Message("Command Mode lost the selected text".into()))?;
             let client = match client_from_config_async(&cfg).await {
                 Ok(client) => client,
                 Err(error) => {
-                    self.finish_error(error.to_string()).await;
+                    // Command Mode rewrites via the LLM provider; Local Whisper / Deepgram
+                    // only cover STT. Surface a clearer message when the polish key is missing.
+                    let message = command_mode_client_error(&error);
+                    self.finish_error(message).await;
                     return Err(error);
                 }
             };
@@ -524,6 +569,15 @@ impl Pipeline {
                     return Err(error);
                 }
             };
+        } else if cfg.polish_enabled && !snippet_expanded && is_deepgram(&cfg) {
+            // Deepgram smart_format already punctuates; polish requires a chat LLM.
+            self.emit(PipelineEvent::state(
+                PipelineState::Processing,
+                Some(
+                    "Polish skipped: Deepgram is STT-only (smart_format is already applied). Use an OpenAI-compatible provider for LLM polish."
+                        .into(),
+                ),
+            ));
         } else if cfg.polish_enabled && !snippet_expanded {
             self.emit(PipelineEvent::Phase {
                 phase: "polishing".into(),

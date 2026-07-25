@@ -31,7 +31,7 @@ This repository is the macOS port of [Oto](https://github.com/0veek/oto), with m
 Most dictation tools force a choice between a cloud-only service, a local model with a developer-oriented interface, or an intrusive floating window. Oto keeps the interaction small while making the underlying pipeline configurable:
 
 - **System-wide push-to-talk** — dictate into browsers, editors, chat apps, notes, and other macOS applications.
-- **Cloud or on-device transcription** — use an OpenAI-compatible speech endpoint or a local whisper.cpp-compatible model.
+- **Cloud or on-device transcription** — use Deepgram (Nova-3), an OpenAI-compatible speech endpoint, or a local whisper.cpp-compatible model.
 - **Optional writing cleanup** — correct punctuation, grammar, filler words, and tone before insertion.
 - **Reusable writing tools** — maintain a personal dictionary, exact-match voice snippets, and style presets.
 - **Selected-text commands** — select text and say instructions such as “make this concise” or “translate this to Spanish.”
@@ -261,19 +261,23 @@ Without Accessibility permission, transcription can still finish, but automatic 
 
 ## Providers and models
 
-Oto uses two OpenAI-compatible API shapes:
+Oto supports Deepgram’s native listen API for speech-to-text, plus OpenAI-compatible endpoints for transcription and optional transcript polishing / Command Mode:
 
-- `POST /audio/transcriptions` for cloud speech-to-text.
-- `POST /chat/completions` for optional cleanup and Command Mode.
+- Deepgram: `POST /v1/listen` with `Authorization: Token …`
+- OpenAI-compatible STT: `POST /audio/transcriptions`
+- OpenAI-compatible chat: `POST /chat/completions` for optional cleanup and Command Mode
 
 | Preset | API root selected by the preset | Common transcription model | Common polish model |
 | --- | --- | --- | --- |
+| Deepgram | `https://api.deepgram.com` | `nova-3` | — (STT only; uses `smart_format`) |
 | OpenAI | `https://api.openai.com/v1` | `whisper-1` | `gpt-4o-mini` |
 | Groq | `https://api.groq.com/openai/v1` | `whisper-large-v3` | `llama-3.1-8b-instant` |
 | OpenRouter | `https://openrouter.ai/api/v1` | Endpoint dependent | `openai/gpt-4o-mini` or another supported chat model |
 | Custom | User supplied | User supplied | User supplied |
 
-The model values above are examples, not a compatibility guarantee. Changing the provider preset updates the known base URL but deliberately does not overwrite the model fields; confirm both model identifiers in **Models**. Provider support depends on the endpoint implementing the relevant API, and a service may support chat completions without supporting audio transcription. Oto surfaces the provider's HTTP status and error message when possible.
+Deepgram defaults to **Nova-3** with `smart_format=true`. When vocabulary boost is enabled, dictionary terms are sent as Nova-3 [keyterm prompts](https://developers.deepgram.com/docs/keyterm). Polish and Command Mode need an OpenAI-compatible chat model — switch provider or use a custom profile if you need LLM post-processing.
+
+The model values above are examples, not a compatibility guarantee. Selecting a known preset fills its base URL and default model fields; confirm both model identifiers in **Models**. Provider support depends on the endpoint implementing the relevant API, and a service may support chat completions without supporting audio transcription. Oto surfaces the provider's HTTP status and error message when possible.
 
 Custom provider profiles can keep separate names, base URLs, transcription models, polish models, and Keychain credentials. HTTP endpoints are accepted for localhost development; remote services should use HTTPS.
 
