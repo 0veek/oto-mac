@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
   import { IconChevronDown } from "@tabler/icons-svelte";
   import type { AppConfig, IdleBehavior, ThemePreset } from "$lib/types";
 
@@ -12,6 +14,43 @@
   let previewBusy = $state(false);
   let micBusy = $state(false);
   let status = $state<string | null>(null);
+  let launchAtLogin = $state(false);
+  let launchBusy = $state(false);
+  let launchError = $state<string | null>(null);
+  let launchAvailable = $state(true);
+
+  onMount(() => {
+    void isEnabled()
+      .then((value) => {
+        launchAtLogin = value;
+        launchAvailable = true;
+      })
+      .catch(() => {
+        // Browser preview / missing plugin bindings
+        launchAvailable = false;
+      });
+  });
+
+  async function setLaunchAtLogin(next: boolean) {
+    if (launchBusy || next === launchAtLogin) return;
+    launchBusy = true;
+    launchError = null;
+    const previous = launchAtLogin;
+    launchAtLogin = next;
+    try {
+      if (next) {
+        await enable();
+      } else {
+        await disable();
+      }
+      launchAtLogin = await isEnabled();
+    } catch (error) {
+      launchAtLogin = previous;
+      launchError = `Could not update launch at login: ${String(error)}`;
+    } finally {
+      launchBusy = false;
+    }
+  }
 
   const IDLE_OPTIONS: {
     value: IdleBehavior;
@@ -68,13 +107,36 @@
   <header>
     <h2 class="text-xl font-semibold tracking-tight">Appearance</h2>
     <p class="mt-1 text-sm text-slate-400">
-      Overlay idle behavior and quick UI previews without a full dictation run.
+      Startup, overlay idle behavior, and quick UI previews without a full dictation run.
     </p>
   </header>
 
   <div
     class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl"
   >
+    <label
+      class="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3"
+      class:opacity-50={!launchAvailable || launchBusy}
+    >
+      <span>
+        <span class="block text-sm font-medium text-slate-200">Launch at login</span>
+        <span class="block text-xs text-slate-500">
+          Start Oto in the menu bar when you sign in to macOS. Applies immediately.
+        </span>
+      </span>
+      <input
+        type="checkbox"
+        checked={launchAtLogin}
+        disabled={!launchAvailable || launchBusy}
+        onchange={(event) => {
+          void setLaunchAtLogin(event.currentTarget.checked);
+        }}
+      />
+    </label>
+    {#if launchError}
+      <p class="text-sm text-rose-400" role="alert">{launchError}</p>
+    {/if}
+
     <div class="grid gap-4 sm:grid-cols-2">
       <label class="block space-y-1.5">
         <span class="text-sm font-medium text-slate-300">Theme</span>

@@ -111,10 +111,21 @@ fn setup_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Arg written into the login LaunchAgent so cold starts from login stay tray-only.
+const AUTOSTART_ARG: &str = "--autostarted";
+
+fn launched_from_autostart() -> bool {
+    std::env::args().any(|arg| arg == AUTOSTART_ARG)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![AUTOSTART_ARG]),
+        ))
         .invoke_handler(tauri::generate_handler![
             commands::config_cmds::get_config,
             commands::config_cmds::set_config,
@@ -181,7 +192,10 @@ pub fn run() {
                         let _ = settings_for_event.hide();
                     }
                 });
-                let _ = settings.show();
+                // Login launches should stay in the menu bar; open settings from the tray.
+                if !launched_from_autostart() {
+                    let _ = settings.show();
+                }
             }
 
             // Overlay: preload webview (visible:false windows often stay cold until first show),
