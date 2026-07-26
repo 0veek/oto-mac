@@ -4,11 +4,17 @@ use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
 
 /// Snapshot of the application that should receive injected text.
-#[derive(Debug, Clone, Default)]
+///
+/// `class` is the localized application name — the form a person recognises and
+/// the form a polish model can act on. `bundle_id` is kept alongside it so Modes
+/// and the never-describe list can match a reverse-DNS identifier too.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FocusTarget {
     pub pid: Option<i32>,
     pub name: Option<String>,
     pub class: Option<String>,
+    pub bundle_id: Option<String>,
+    pub title: Option<String>,
 }
 
 fn frontmost_app() -> Option<Retained<NSRunningApplication>> {
@@ -62,11 +68,20 @@ fn previous_non_oto_app() -> Option<Retained<NSRunningApplication>> {
 
 fn target_from_app(app: &NSRunningApplication) -> FocusTarget {
     let name = app.localizedName().map(|s| s.to_string());
-    let pid = Some(app.processIdentifier());
+    let bundle_id = app
+        .bundleIdentifier()
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty());
+    let pid = app.processIdentifier();
+    // Reading the title costs one Accessibility round trip and is skipped when
+    // the permission is missing, so an unprivileged run still captures focus.
+    let title = crate::injection::ax_inject::focused_window_title(pid);
     FocusTarget {
-        pid,
+        pid: Some(pid),
         name: name.clone(),
         class: name,
+        bundle_id,
+        title,
     }
 }
 

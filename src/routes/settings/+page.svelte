@@ -7,25 +7,32 @@
   import ProvidersSection from "$lib/components/settings/ProvidersSection.svelte";
   import ModelsSection from "$lib/components/settings/ModelsSection.svelte";
   import HotkeysSection from "$lib/components/settings/HotkeysSection.svelte";
+  import AudioSection from "$lib/components/settings/AudioSection.svelte";
+  import ModesSection from "$lib/components/settings/ModesSection.svelte";
   import DictionarySection from "$lib/components/settings/DictionarySection.svelte";
   import SnippetsSection from "$lib/components/settings/SnippetsSection.svelte";
   import StylesSection from "$lib/components/settings/StylesSection.svelte";
   import HistorySection from "$lib/components/settings/HistorySection.svelte";
+  import StatsSection from "$lib/components/settings/StatsSection.svelte";
   import PrivacySection from "$lib/components/settings/PrivacySection.svelte";
   import AppearanceSection from "$lib/components/settings/AppearanceSection.svelte";
   import InjectionSection from "$lib/components/settings/InjectionSection.svelte";
   import PermissionsSection from "$lib/components/settings/PermissionsSection.svelte";
   import AboutSection from "$lib/components/settings/AboutSection.svelte";
+  import OnboardingWizard from "$lib/components/OnboardingWizard.svelte";
   import { applyTheme } from "$lib/theme";
 
   const SECTIONS = [
     { id: "providers", label: "Providers" },
     { id: "models", label: "Models" },
     { id: "hotkeys", label: "Hotkeys" },
+    { id: "audio", label: "Audio" },
+    { id: "modes", label: "Modes" },
     { id: "dictionary", label: "Dictionary" },
     { id: "snippets", label: "Snippets" },
     { id: "styles", label: "Styles & commands" },
     { id: "history", label: "History" },
+    { id: "stats", label: "Stats" },
     { id: "permissions", label: "Permissions" },
     { id: "appearance", label: "Appearance" },
     { id: "privacy", label: "Privacy" },
@@ -45,6 +52,8 @@
     "providers",
     "models",
     "hotkeys",
+    "audio",
+    "modes",
     "dictionary",
     "snippets",
     "styles",
@@ -94,6 +103,30 @@
         custom_providers: [],
         active_custom_provider_id: null,
         sync: { enabled: false, endpoint: "" },
+        activation_mode: "hold",
+        hybrid_tap_threshold_ms: 350,
+        audio: {
+          input_device: null,
+          input_gain: 1,
+          noise_gate: false,
+          noise_gate_threshold: 0.02,
+        },
+        vad: { auto_stop: true, silence_ms: 1500, min_speech_ms: 400 },
+        sounds: {
+          enabled: false,
+          volume: 0.4,
+          on_start: true,
+          on_stop: true,
+          on_done: false,
+          on_error: true,
+        },
+        modes: [],
+        context_level: "app",
+        context_blocklist: [],
+        voice_edits_enabled: true,
+        replacements: [],
+        keep_history_audio: false,
+        onboarding_complete: true,
       };
     }
   }
@@ -147,7 +180,17 @@
   });
 </script>
 
-{#if !config}
+{#if config && !config.onboarding_complete}
+  <!-- First run only: an existing config.json always arrives with this set. -->
+  <div class="oto-settings-onboarding" data-theme={config.theme}>
+    <OnboardingWizard
+      bind:config
+      ondone={() => {
+        saveStatus = null;
+      }}
+    />
+  </div>
+{:else if !config}
   <div class="flex h-screen items-center justify-center bg-slate-950 text-slate-400">
     Loading settings…
   </div>
@@ -176,6 +219,10 @@
         <ModelsSection bind:config />
       {:else if active === "hotkeys"}
         <HotkeysSection bind:config />
+      {:else if active === "audio"}
+        <AudioSection bind:config />
+      {:else if active === "modes"}
+        <ModesSection bind:config />
       {:else if active === "dictionary"}
         <DictionarySection bind:config />
       {:else if active === "snippets"}
@@ -184,6 +231,8 @@
         <StylesSection bind:config />
       {:else if active === "history"}
         <HistorySection />
+      {:else if active === "stats"}
+        <StatsSection />
       {:else if active === "appearance"}
         <AppearanceSection bind:config />
       {:else if active === "privacy"}

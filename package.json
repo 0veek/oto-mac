@@ -1,6 +1,6 @@
 {
   "name": "oto-mac",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "System-wide AI voice dictation for macOS",
   "type": "module",
   "scripts": {

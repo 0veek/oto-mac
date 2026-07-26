@@ -18,6 +18,12 @@ pub async fn ptt_up(state: State<'_, AppState>) -> Result<(), OtoError> {
     state.pipeline.ptt_up().await
 }
 
+/// Remove the text Oto last inserted, when that is still safe.
+#[tauri::command]
+pub async fn undo_last_insertion(state: State<'_, AppState>) -> Result<String, OtoError> {
+    state.pipeline.undo_last_insertion().await
+}
+
 /// Begin select-and-rewrite Command Mode. The delay gives a settings-window
 /// caller time to refocus the app containing the selection.
 #[tauri::command]

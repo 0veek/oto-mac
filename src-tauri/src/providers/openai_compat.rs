@@ -221,6 +221,15 @@ pub fn build_polish_system_prompt(ctx: &PolishContext) -> String {
         p.push_str(language);
         p.push('.');
     }
+    if let Some(app_context) = ctx
+        .app_context
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        p.push(' ');
+        p.push_str(app_context);
+    }
     p
 }
 
@@ -312,6 +321,7 @@ mod tests {
             language: Some("en".into()),
             dictionary: vec!["Kubernetes".into(), "Oto".into()],
             tone_hint: String::new(),
+            app_context: None,
         };
         let prompt = build_polish_system_prompt(&ctx);
         assert!(prompt.contains("Kubernetes"));
@@ -325,6 +335,7 @@ mod tests {
             language: None,
             dictionary: vec![],
             tone_hint: "professional and concise".into(),
+            app_context: None,
         };
         let prompt = build_polish_system_prompt(&ctx);
         assert!(prompt.contains("professional and concise"));
@@ -337,11 +348,34 @@ mod tests {
             language: None,
             dictionary: vec![],
             tone_hint: "   ".into(),
+            app_context: None,
         };
         let prompt = build_polish_system_prompt(&ctx);
         assert!(!prompt.contains("Prefer these spellings"));
         assert!(!prompt.contains("Tone/style:"));
         assert!(prompt.contains("expert editor"));
+    }
+
+    #[test]
+    fn polish_prompt_carries_application_context_when_present() {
+        let ctx = PolishContext {
+            app_context: Some("This text will be typed into the application \"Slack\".".into()),
+            ..PolishContext::default()
+        };
+        let prompt = build_polish_system_prompt(&ctx);
+        assert!(prompt.contains("Slack"));
+    }
+
+    #[test]
+    fn polish_prompt_omits_blank_application_context() {
+        // Level None and a redacted app both produce nothing; neither should
+        // leave a dangling fragment in the prompt.
+        let ctx = PolishContext {
+            app_context: Some("   ".into()),
+            ..PolishContext::default()
+        };
+        let prompt = build_polish_system_prompt(&ctx);
+        assert!(prompt.trim_end().ends_with("Output only the final text."));
     }
 
     #[test]

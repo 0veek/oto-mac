@@ -27,6 +27,8 @@ use crate::error::{OtoError, OtoResult};
 
 const KEY_C: CGKeyCode = 8;
 const KEY_V: CGKeyCode = 9;
+/// Virtual keycode for the Delete key (backspace).
+const KEY_DELETE: CGKeyCode = 51;
 
 static PROMPTED_THIS_SESSION: AtomicBool = AtomicBool::new(false);
 
@@ -243,6 +245,35 @@ pub fn simulate_copy_to(target_pid: Option<i32>) -> OtoResult<()> {
         return Ok(());
     }
     copy_via_osascript()
+}
+
+/// Delete the previous `count` characters by sending Delete (⌫).
+///
+/// Genuinely destructive: it removes whatever is left of the caret, which is
+/// only the dictated text if nothing has moved since. The caller is responsible
+/// for the freshness and same-application checks that make that assumption safe.
+pub fn simulate_backspace(count: usize, target_pid: Option<i32>) -> OtoResult<()> {
+    if count == 0 {
+        return Ok(());
+    }
+    if !is_process_trusted(false) {
+        return Err(not_trusted_message("undo (⌫)"));
+    }
+    release_modifiers(target_pid);
+    thread::sleep(Duration::from_millis(40));
+
+    for _ in 0..count {
+        if let Some(pid) = target_pid.filter(|p| *p > 0) {
+            post_key_to_pid(pid, KEY_DELETE, true, CGEventFlags::empty())?;
+            post_key_to_pid(pid, KEY_DELETE, false, CGEventFlags::empty())?;
+        } else {
+            post_key_global(KEY_DELETE, true, CGEventFlags::empty())?;
+            post_key_global(KEY_DELETE, false, CGEventFlags::empty())?;
+        }
+        // Electron and web views drop keystrokes posted back to back.
+        thread::sleep(Duration::from_millis(4));
+    }
+    Ok(())
 }
 
 /// Type `text` as unicode key events.

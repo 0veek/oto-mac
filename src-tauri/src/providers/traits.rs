@@ -10,11 +10,14 @@ pub struct TranscriptionContext {
     pub keyterms: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PolishContext {
     pub language: Option<String>,
     pub dictionary: Vec<String>,
     pub tone_hint: String,
+    /// Where the text is going, as one sentence. Built by `pipeline::context`
+    /// under the user's disclosure level; `None` sends nothing.
+    pub app_context: Option<String>,
 }
 
 #[async_trait]

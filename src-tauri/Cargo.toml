@@ -1,6 +1,6 @@
 [package]
 name = "oto"
-version = "0.1.0"
+version = "0.2.0"
 description = "System-wide AI voice dictation for macOS"
 authors = ["you"]
 edition = "2021"
@@ -33,7 +33,9 @@ hound = "3.5.1"
 tauri-plugin-global-shortcut = "2.3.2"
 async-trait = "0.1.91"
 arboard = "3.6.1"
+futures-util = "0.3.33"
 whisper-rs = "0.16.0"
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 core-foundation = "0.10"
 core-graphics = { version = "0.25", features = ["elcapitan", "highsierra"] }
 objc2 = "0.6"

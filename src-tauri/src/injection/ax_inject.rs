@@ -31,6 +31,7 @@ const INSERTABLE_ROLES: &[&str] = &[
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+    fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
     fn AXUIElementCopyAttributeValue(
         element: AXUIElementRef,
         attribute: CFStringRef,
@@ -190,6 +191,41 @@ pub fn try_ax_insert(text: &str) -> OtoResult<bool> {
     }
 
     Ok(applied)
+}
+
+/// Title of the focused window of the application owning `pid`.
+///
+/// Modes match on it and the context builder may disclose it, so a failure has
+/// to be a quiet `None` rather than an error: a missing title must never stop a
+/// dictation.
+pub fn focused_window_title(pid: i32) -> Option<String> {
+    if !is_process_trusted(false) {
+        return None;
+    }
+    let app = unsafe { AXUIElementCreateApplication(pid) };
+    if app.is_null() {
+        return None;
+    }
+    unsafe {
+        let _ = AXUIElementSetMessagingTimeout(app, 0.35);
+    }
+    // AXFocusedWindow is the typing target; AXMainWindow is the fallback for
+    // applications that never mark a window focused.
+    let window = copy_attribute(app, "AXFocusedWindow")
+        .or_else(|| copy_attribute(app, "AXMainWindow"))
+        .map(|v| v as AXUIElementRef);
+    unsafe {
+        CFRelease(app as CFTypeRef);
+    }
+    let window = window?;
+    unsafe {
+        let _ = AXUIElementSetMessagingTimeout(window, 0.35);
+    }
+    let title = attribute_string(window, "AXTitle");
+    unsafe {
+        CFRelease(window as CFTypeRef);
+    }
+    title.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
 }
 
 /// Try to read the focused field's selected text via Accessibility.

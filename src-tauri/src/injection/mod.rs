@@ -13,7 +13,7 @@ pub use focus::{
 pub use paste::{
     accessibility_status, accessibility_status_detail, display_name, ensure_accessibility_prompt,
     executable_path, is_bundled_app, is_process_trusted, open_accessibility_settings,
-    reveal_executable_in_finder, AccessibilityStatus,
+    reveal_executable_in_finder, simulate_backspace, AccessibilityStatus,
 };
 
 use crate::config::InjectionMode;
@@ -56,6 +56,48 @@ fn paste_via_clipboard(text: &str, target_pid: Option<i32>) -> OtoResult<()> {
     Ok(())
 }
 
+/// How long the transcript stays on the clipboard before the previous contents
+/// are put back. Long enough for any application to service the synthetic ⌘V,
+/// short enough that the user's own clipboard is not gone for long.
+const CLIPBOARD_RESTORE_DELAY: std::time::Duration = std::time::Duration::from_millis(900);
+
+/// Put `previous` back on the clipboard once the paste has landed.
+///
+/// Dictating should not cost the user whatever they had copied. Detached so the
+/// pipeline is not held up, and it re-reads first so a clipboard the user
+/// changed in the meantime is left alone.
+fn restore_clipboard_later(previous: Option<String>, injected: String) {
+    let Some(previous) = previous else {
+        return;
+    };
+    if previous == injected {
+        return;
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(CLIPBOARD_RESTORE_DELAY);
+        match get_clipboard_text() {
+            // Only restore if our transcript is still what is on the clipboard.
+            Ok(current) if current == injected => {
+                if let Err(error) = set_clipboard_text(&previous) {
+                    append_inject_log(&format!("clipboard restore failed: {error}"));
+                } else {
+                    append_inject_log("clipboard restored");
+                }
+            }
+            _ => append_inject_log("clipboard changed since paste — left as is"),
+        }
+    });
+}
+
+/// The focused field's selection, read through Accessibility.
+///
+/// Used by the `Selection` context tier. Unlike [`capture_selected_text`] it
+/// never touches the clipboard, so reading context cannot disturb what the user
+/// has copied.
+pub fn read_ax_selection() -> Option<String> {
+    try_ax_selection().ok().flatten()
+}
+
 fn automatic_injection_failed(
     text: &str,
     paste_error: &OtoError,
@@ -88,6 +130,16 @@ pub async fn inject_text_to(
     mode: &InjectionMode,
     focus: Option<&FocusTarget>,
 ) -> OtoResult<InjectResult> {
+    inject_text_with_options(text, mode, focus, true).await
+}
+
+/// As [`inject_text_to`], with control over whether the clipboard is restored.
+pub async fn inject_text_with_options(
+    text: &str,
+    mode: &InjectionMode,
+    focus: Option<&FocusTarget>,
+    restore_clipboard: bool,
+) -> OtoResult<InjectResult> {
     let target_pid = focus.and_then(|f| f.pid);
     append_inject_log(&format!(
         "inject_text mode={mode:?} chars={} focus_before={} ax={} target_pid={:?}",
@@ -118,6 +170,15 @@ pub async fn inject_text_to(
         let _ = ensure_accessibility_prompt();
         append_inject_log(&format!("ax_after_prompt={}", accessibility_status()));
     }
+
+    // Snapshot before anything writes to the clipboard. Clipboard-only mode is
+    // excluded on purpose: there the clipboard *is* the delivery mechanism, so
+    // putting the old value back would throw the transcript away.
+    let previous_clipboard = if restore_clipboard && *mode != InjectionMode::ClipboardOnly {
+        get_clipboard_text().ok()
+    } else {
+        None
+    };
 
     let result = match mode {
         InjectionMode::ClipboardOnly => {
@@ -175,7 +236,13 @@ pub async fn inject_text_to(
         },
     };
     match &result {
-        Ok(kind) => append_inject_log(&format!("result={kind:?}")),
+        Ok(kind) => {
+            append_inject_log(&format!("result={kind:?}"));
+            // A fallback to clipboard-only means the user still has to paste it.
+            if *kind != InjectResult::ClipboardOnly {
+                restore_clipboard_later(previous_clipboard, text.to_string());
+            }
+        }
         Err(error) => append_inject_log(&format!("error={error}")),
     }
     result

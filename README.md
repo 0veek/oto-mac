@@ -24,19 +24,21 @@ This repository is the macOS port of [Oto](https://github.com/0veek/oto), with m
 </p>
 
 > [!IMPORTANT]
-> Oto is currently at version `0.1.0`. It is usable, but configuration fields, provider behavior, and packaging details may change before a stable release. There is no automatic updater yet.
+> Oto is currently at version `0.2.0`. It is usable, but configuration fields, provider behavior, and packaging details may change before a stable release. There is no automatic updater yet.
 
 ## Why Oto
 
 Most dictation tools force a choice between a cloud-only service, a local model with a developer-oriented interface, or an intrusive floating window. Oto keeps the interaction small while making the underlying pipeline configurable:
 
-- **System-wide push-to-talk** — dictate into browsers, editors, chat apps, notes, and other macOS applications.
-- **Cloud or on-device transcription** — use Deepgram (Nova-3), an OpenAI-compatible speech endpoint, or a local whisper.cpp-compatible model.
+- **System-wide push-to-talk, toggle, or hybrid activation** — dictate into browsers, editors, chat apps, notes, and other macOS applications, hands-free when you want it.
+- **Cloud, streaming, or on-device transcription** — stream live to Deepgram (Nova-3), upload to an OpenAI-compatible speech endpoint, or run a local whisper.cpp-compatible model.
+- **Per-application Modes** — override the whole pipeline for a given app, matched by name, bundle id, or window title.
 - **Optional writing cleanup** — correct punctuation, grammar, filler words, and tone before insertion.
 - **Reusable writing tools** — maintain a personal dictionary, exact-match voice snippets, and style presets.
 - **Selected-text commands** — select text and say instructions such as “make this concise” or “translate this to Spanish.”
 - **Layered delivery** — Oto restores the original target app and tries multiple macOS insertion strategies.
 - **Local-first configuration** — ordinary settings and history remain on the Mac; secrets are stored in Keychain.
+- **Tiered context sharing** — tell the cleanup model as much or as little about the target app as you want; password managers and the keychain are always excluded.
 - **A restrained Mac interface** — graphite settings, native window vibrancy, and a 220 × 36 liquid-glass-style overlay.
 
 ## How it works
@@ -89,6 +91,11 @@ The overlay follows the same lifecycle:
 - Optional language hinting and automatic language detection.
 - Dictionary-based vocabulary prompting for names, technical terms, and preferred spellings.
 - Optional partial results while using Local Whisper. Partial inference runs approximately every 1.8 seconds and never aborts the final transcription if preview generation fails.
+- Live streaming transcription over Deepgram's WebSocket API, so the transcript is ready almost as soon as you stop speaking. A dropped connection, an empty result, or a provider error all fall back to the ordinary upload on audio that was captured anyway.
+- Push-to-talk, toggle, or hybrid activation, where a tap shorter than the threshold goes hands-free and a longer hold behaves like push-to-talk.
+- Silence detection that ends hands-free sessions on its own, preferring the provider's own end-of-utterance signal while streaming. A held shortcut is never cut off mid-pause.
+- Microphone selection with fallback to the system default, input gain, and an adaptive noise gate.
+- Optional synthesized cues for start, stop, insertion, and errors.
 
 ### Writing assistance
 
@@ -99,6 +106,10 @@ The overlay follows the same lifecycle:
 - Custom style presets with reusable prompt instructions.
 - Command Mode for rewriting selected text with a spoken instruction.
 - Graceful polish fallback: if cleanup fails, normal dictation continues with the raw transcript instead of discarding it.
+- Spoken edits — `scratch that` retracts the clause you just spoke, `new paragraph` and `new line` insert breaks. Applied before cleanup, so the model never sees the retracted words.
+- Replacement rules for the words a model always gets wrong, applied after cleanup so they are the final say on spelling.
+- Corrections you type by hand in History can be turned into replacement rules; only consistent one-for-one word substitutions are ever proposed, and nothing is saved until you accept it.
+- Per-application Modes that override the speech backend, provider, model, cleanup, style, vocabulary, insertion method, and context level for a given app, with an optional dedicated shortcut.
 
 ### macOS integration
 
@@ -108,12 +119,20 @@ The overlay follows the same lifecycle:
 - Accessibility status reporting and direct links to the relevant System Settings panes.
 - Automatic overlay positioning near the bottom center of the current monitor, with persisted custom coordinates after dragging.
 - Settings window with macOS overlay title bar, hidden title, under-window background material, and native traffic-light placement.
+- Guided first-run setup covering Accessibility permission, microphone, provider and key, shortcut and activation mode, and a live end-to-end test.
+- Multiple global shortcuts: the primary dictation chord plus one per Mode. A Mode chord macOS refuses is reported and never costs you the working dictation key.
+- Application identity read through `NSWorkspace` and window titles through the Accessibility API, which is what Modes and context matching use.
+- Your clipboard is restored after a clipboard-based insertion, unless you changed it in the meantime.
+- Undo of the last insertion, guarded so it can never delete text it did not write.
 
 ### Data and privacy controls
 
 - API keys and sync bearer tokens are stored in macOS Keychain.
 - Ordinary settings are saved as readable JSON without credential fields.
-- Dictation history is optional, local, individually removable, clearable, and capped from 1 to 1,000 entries.
+- Dictation history is optional, local, individually removable, clearable, and capped from 1 to 1,000 entries, with full-text search, re-insertion, and audio-file import.
+- Optional audio retention per entry, so a recording can be replayed or re-transcribed against different settings. Deleting an entry, or trimming past the limit, removes its audio with it.
+- Usage statistics derived from history alone — no separate tracking store, and disabling history disables stats.
+- Tiered context sharing: nothing, the application name, the window title, or nearby text read through the Accessibility API. Password managers, the keychain, and authenticators are always excluded and disclose nothing at all, not even their name.
 - User-controlled JSON sync is disabled by default and only includes dictionary terms, snippets, and styles.
 - Sync requires HTTPS, except for explicit `localhost` development endpoints.
 - Oto does not sync provider keys, history, audio, or provider credentials.
@@ -161,13 +180,18 @@ The first launch opens Settings. The overlay is preloaded in the background so t
 
 ### 3. Complete first-run setup
 
+A setup wizard runs the first time Oto starts with no configuration file. It covers the Accessibility permission, microphone selection, provider and API key, shortcut and activation mode, and a live microphone, transcription, and insertion test. It can be skipped, and it never reappears for an existing configuration — upgrading from 0.1.0 goes straight to Settings.
+
+To configure manually instead:
+
 1. Open **Providers**, select OpenAI, Groq, OpenRouter, or Custom, and save the API key.
 2. Open **Models** and choose **Cloud** or **Local Whisper** transcription.
 3. Confirm the model identifiers accepted by the selected provider.
-4. Keep the default `Ctrl+Shift+Space` shortcut or choose another unused combination.
-5. Open **Permissions** and grant the required macOS permissions.
-6. Run **Test microphone**, **Test transcription**, and **Test insertion**.
-7. Focus any text field, hold the shortcut while speaking, then release it.
+4. Open **Audio** and choose a microphone and an activation mode.
+5. Keep the default `Ctrl+Shift+Space` shortcut or choose another unused combination.
+6. Open **Permissions** and grant the required macOS permissions.
+7. Run **Test microphone**, **Test transcription**, and **Test insertion**.
+8. Focus any text field, hold the shortcut while speaking, then release it.
 
 If the configured shortcut is unavailable, Oto attempts to recover to `Ctrl+Shift+Space`. The menu bar Start/Stop actions remain available if no global shortcut can be registered.
 
@@ -312,14 +336,17 @@ The model context is cached for the active model path. Changing the path loads a
 | **Providers** | Select a preset, configure a custom OpenAI-compatible endpoint, manage provider profiles, and store Keychain credentials. |
 | **Models** | Choose cloud or local transcription, model identifiers, language, vocabulary boost, partial results, polish, temperature, and tone guidance. |
 | **Hotkeys** | Configure the global push-to-talk shortcut and review conflict guidance. |
+| **Audio** | Choose a microphone, set input gain and the noise gate, pick an activation mode, tune silence detection, and audition sound cues. |
+| **Modes** | Create per-application overrides, read the focused application's identity, and preview the exact context that would be sent. |
 | **Injection** | Choose a delivery strategy, inspect the current app identity and Accessibility state, reveal the executable, and run an insertion test. |
 | **Dictionary** | Maintain preferred names, spellings, products, and domain vocabulary. |
 | **Snippets** | Create exact-match spoken triggers that expand into longer text. |
 | **Styles** | Select or create reusable writing instructions and start Command Mode. |
-| **History** | Review, copy, remove, or clear recent local dictations. |
+| **History** | Search, copy, re-insert, replay, re-transcribe, remove, or clear recent local dictations, teach corrections, and transcribe an audio file. |
+| **Stats** | Words dictated, sessions, estimated time saved, and daily streaks, all derived from local history. |
 | **Permissions** | Inspect macOS access and open the matching System Settings panes. |
 | **Appearance** | Choose a theme, font scale, reduced motion, idle overlay behavior, overlay position, and run a visual or microphone preview. |
-| **Privacy** | Control local history and optional user-owned JSON synchronization. |
+| **Privacy** | Choose what the cleanup model is told about the target application, extend the never-describe list, control local history and audio retention, and configure optional user-owned JSON synchronization. |
 | **About** | View version, identifier, local data location, and privacy summary. |
 
 ## Text delivery modes
@@ -333,7 +360,9 @@ The model context is cached for the active model path. Changing the path loads a
 
 Oto captures the active process when recording begins. Before delivery it hides Settings, keeps the overlay non-focusable, reactivates the captured app, waits for macOS focus changes to settle, and only then attempts insertion.
 
-Because automatic delivery uses the system pasteboard, it replaces the current clipboard contents with the final transcript.
+Because automatic delivery uses the system pasteboard, it briefly replaces the clipboard contents with the final transcript. About a second later Oto puts the previous contents back — but only after confirming the transcript is still what is on the pasteboard, so a clipboard you changed in the meantime is left alone. Clipboard-only mode is excluded, since there the clipboard *is* the delivery mechanism.
+
+The `undo_last_insertion` command removes the text Oto last inserted by sending backspaces. It is deliberately narrow, and refuses once the insertion is older than 45 seconds, once focus has moved to a different application, when the text is longer than 2000 characters, or while a dictation is running — deleting backwards from the caret is only correct while the caret is still where the insertion left it.
 
 ## Snippets, styles, and Command Mode
 
@@ -378,7 +407,9 @@ The exact executable and data location are shown inside **About** and **Injectio
 | Provider API keys | macOS Keychain, service `dev.oto.mac` | Sent as bearer credentials to the selected provider. |
 | Sync bearer token | macOS Keychain | Sent only to the user-configured sync endpoint. |
 | Dictation history | `history.json` in Oto's local application-data directory | Never synced by Oto. |
+| Retained dictation audio | `audio/<entry-id>.wav` beside `history.json`, only while **Keep dictation audio** is on | Sent to the selected provider again only when you press **Re-transcribe**. |
 | Recorded audio | In-memory capture and WAV bytes for the current/last session | Sent to the selected cloud STT provider, or processed locally with Local Whisper. |
+| Target application context | Not stored | Sent to the cleanup model only when cleanup is enabled, and only up to the level chosen under **Privacy**. Blocked applications disclose nothing. |
 | Dictionary | Local config | Included in STT vocabulary prompts and polish prompts when those features are enabled. |
 | Snippets and styles | Local config | Styles may be included in polish/rewrite prompts. Snippets expand locally. |
 
@@ -404,21 +435,21 @@ Only use a private endpoint you control. Transport security and access control r
 ```text
 oto-mac/
 ├── src/                              SvelteKit frontend
-│   ├── lib/components/               Overlay and settings components
+│   ├── lib/components/               Overlay, first-run wizard, and settings components
 │   ├── lib/components/settings/      Individual settings sections
 │   ├── lib/stores/                   Pipeline event state
 │   └── routes/                       Overlay, settings, and component preview routes
 ├── src-tauri/                        Native Rust application
 │   ├── capabilities/                 Tauri capability declarations
 │   ├── icons/                        Application icons
-│   ├── src/audio/                    Microphone capture and WAV encoding
+│   ├── src/audio/                    Capture, device selection, VAD, cues, and WAV encoding
 │   ├── src/commands/                 Frontend-facing Tauri commands
-│   ├── src/config/                   Config models, persistence, and Keychain access
-│   ├── src/features/                 History, snippets, and user-controlled sync
-│   ├── src/hotkeys/                  Global shortcut parsing and registration
+│   ├── src/config/                   Config models, Mode resolution, persistence, Keychain access
+│   ├── src/features/                 History, snippets, spoken edits, replacements, stats, sync
+│   ├── src/hotkeys/                  Global shortcut parsing, binding sets, and registration
 │   ├── src/injection/                Focus, clipboard, AX, paste, and typing delivery
-│   ├── src/pipeline/                 Dictation and Command Mode orchestration
-│   ├── src/providers/                Cloud and local transcription/polish clients
+│   ├── src/pipeline/                 Dictation and Command Mode orchestration, context assembly
+│   ├── src/providers/                Cloud, streaming, and local transcription/polish clients
 │   ├── Entitlements.plist            Hardened Runtime entitlements
 │   ├── Info.plist                    macOS privacy usage descriptions
 │   └── tauri.conf.json               Windows, bundle, material, and build configuration
@@ -529,7 +560,9 @@ Use a consistently located, signed `.app` bundle. Development binaries and bundl
 - Prebuilt, notarized release artifacts and automatic updates are not yet provided by this repository.
 - Automatic insertion depends on the destination app and macOS permission state; no single method works in every secure or custom text control.
 - Local Whisper keeps speech recognition on-device, but polish and Command Mode still use the configured cloud chat provider.
-- Clipboard-based delivery replaces the existing clipboard contents.
+- Clipboard-based delivery replaces the clipboard contents for about a second before restoring them.
+- Live streaming transcription is Deepgram-only; OpenAI-compatible endpoints have no comparable streaming upload API and keep the batch path.
+- Window titles, and therefore title-based Mode rules and the window context tier, require Accessibility permission.
 - Command Mode requires readable selected text and a compatible chat-completions endpoint.
 - The compact overlay communicates status; it is intentionally not a transcript editor.
 - Sync is a simple user-owned JSON GET/PUT protocol, not a hosted account service or multi-user conflict-resolution system.

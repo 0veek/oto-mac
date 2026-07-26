@@ -1,7 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import type { AppConfig, HistoryEntry } from "$lib/types";
+  import type {
+    AppConfig,
+    HistoryEntry,
+    ReplacementSuggestion,
+  } from "$lib/types";
 
   let entries = $state<HistoryEntry[]>([]);
   let historyEnabled = $state(true);
@@ -10,6 +14,144 @@
   let clearing = $state(false);
   /** In-app confirm — native window.confirm is unreliable in Tauri WKWebView. */
   let confirmClear = $state(false);
+  let query = $state("");
+  let audioUrls = $state<Record<string, string>>({});
+  let importPath = $state("");
+
+  // Searching a scratchpad is the whole point of keeping one; match both the
+  // cleaned text and the raw transcript so a mis-transcribed word still finds it.
+  let visible = $derived.by(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return entries;
+    return entries.filter(
+      (entry) =>
+        entry.final_text.toLocaleLowerCase().includes(needle) ||
+        entry.raw_text.toLocaleLowerCase().includes(needle),
+    );
+  });
+
+  async function playAudio(id: string) {
+    busyId = id;
+    status = null;
+    try {
+      audioUrls = { ...audioUrls, [id]: await invoke<string>("get_history_audio", { id }) };
+    } catch (error) {
+      status = `Could not load audio: ${String(error)}`;
+    } finally {
+      busyId = null;
+    }
+  }
+
+  async function retranscribe(id: string) {
+    busyId = id;
+    status = null;
+    try {
+      const text = await invoke<string>("retranscribe_history", { id });
+      status = `Re-transcribed: ${text}`;
+    } catch (error) {
+      status = `Re-transcribe failed: ${String(error)}`;
+    } finally {
+      busyId = null;
+    }
+  }
+
+  async function reinsert(entry: HistoryEntry) {
+    busyId = entry.id;
+    status = "Focus the target window — inserting in about a second…";
+    try {
+      await invoke("reinsert_history", { text: entry.final_text });
+      status = "Inserted.";
+    } catch (error) {
+      status = `Insert failed: ${String(error)}`;
+    } finally {
+      busyId = null;
+    }
+  }
+
+  async function importFile() {
+    const path = importPath.trim();
+    if (!path) return;
+    busyId = "import";
+    status = "Transcribing…";
+    try {
+      const text = await invoke<string>("transcribe_audio_file", { path });
+      status = `Transcribed and saved to history: ${text}`;
+      importPath = "";
+      await refresh();
+    } catch (error) {
+      status = `Transcription failed: ${String(error)}`;
+    } finally {
+      busyId = null;
+    }
+  }
+
+  let correcting = $state<string | null>(null);
+  let correction = $state("");
+  let suggestions = $state<ReplacementSuggestion[]>([]);
+  let accepted = $state<Record<string, boolean>>({});
+
+  function startCorrection(entry: HistoryEntry) {
+    correcting = entry.id;
+    correction = entry.final_text;
+    suggestions = [];
+    accepted = {};
+    status = null;
+  }
+
+  async function findSuggestions(entry: HistoryEntry) {
+    busyId = entry.id;
+    status = null;
+    try {
+      suggestions = await invoke<ReplacementSuggestion[]>("suggest_replacements", {
+        raw: entry.final_text,
+        corrected: correction,
+      });
+      accepted = Object.fromEntries(suggestions.map((s) => [s.from, true]));
+      if (suggestions.length === 0) {
+        status =
+          "No repeatable single-word corrections found. Rules are only learned from consistent word-for-word fixes.";
+      }
+    } catch (error) {
+      status = `Could not compare: ${String(error)}`;
+    } finally {
+      busyId = null;
+    }
+  }
+
+  async function saveSuggestions() {
+    const rules = suggestions
+      .filter((s) => accepted[s.from])
+      .map((s) => ({
+        id: crypto.randomUUID(),
+        from: s.from,
+        to: s.to,
+        whole_word: true,
+        case_sensitive: false,
+        enabled: true,
+      }));
+    if (rules.length === 0) return;
+    busyId = correcting;
+    try {
+      const added = await invoke<number>("add_replacement_rules", { rules });
+      status =
+        added > 0
+          ? `Added ${added} replacement ${added === 1 ? "rule" : "rules"}. Future dictations will apply ${added === 1 ? "it" : "them"} automatically.`
+          : "Those words already have replacement rules.";
+      correcting = null;
+      suggestions = [];
+    } catch (error) {
+      status = `Could not save: ${String(error)}`;
+    } finally {
+      busyId = null;
+    }
+  }
+
+  function formatDuration(ms: number) {
+    if (!ms) return null;
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  }
 
   async function refresh() {
     try {
@@ -122,6 +264,43 @@
     </div>
   {/if}
 
+  <div class="space-y-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+    <div>
+      <h3 class="text-sm font-semibold tracking-tight text-slate-200">Transcribe an audio file</h3>
+      <p class="mt-1 text-xs text-slate-500">
+        Runs a recording through the same pipeline as dictation and saves the result here. Accepts
+        wav, mp3, m4a, ogg, flac, and webm up to 25 MB.
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <input
+        type="text"
+        spellcheck="false"
+        placeholder="/Users/you/recording.m4a"
+        class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 font-mono text-sm"
+        bind:value={importPath}
+      />
+      <button
+        type="button"
+        class="shrink-0 rounded-xl bg-white/10 px-4 py-2.5 text-sm hover:bg-white/15 disabled:opacity-50"
+        disabled={!importPath.trim() || busyId === "import"}
+        onclick={() => void importFile()}
+      >
+        {busyId === "import" ? "Transcribing…" : "Transcribe"}
+      </button>
+    </div>
+  </div>
+
+  {#if entries.length > 1}
+    <input
+      type="search"
+      placeholder="Search transcripts"
+      aria-label="Search history"
+      class="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"
+      bind:value={query}
+    />
+  {/if}
+
   {#if !historyEnabled}
     <p class="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-100/90">
       Saving new history is off. Existing entries below remain until deleted. Re-enable under
@@ -142,15 +321,24 @@
     <div class="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-slate-500">
       No saved dictations yet.
     </div>
+  {:else if visible.length === 0}
+    <div class="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-slate-500">
+      Nothing matches “{query}”.
+    </div>
   {:else}
     <div class="space-y-3">
-      {#each entries as entry (entry.id)}
+      {#each visible as entry (entry.id)}
         <article class="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
           <div class="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500">
             <span class="rounded-full bg-white/5 px-2 py-1 capitalize">{entry.mode}</span>
-            <time datetime={new Date(entry.created_at_ms).toISOString()}>
-              {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(entry.created_at_ms)}
-            </time>
+            <span class="flex items-center gap-2">
+              {#if formatDuration(entry.duration_ms)}
+                <span class="tabular-nums">{formatDuration(entry.duration_ms)}</span>
+              {/if}
+              <time datetime={new Date(entry.created_at_ms).toISOString()}>
+                {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(entry.created_at_ms)}
+              </time>
+            </span>
           </div>
           <p class="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{entry.final_text}</p>
           {#if entry.raw_text !== entry.final_text}
@@ -159,9 +347,48 @@
               <p class="mt-2 whitespace-pre-wrap">{entry.raw_text}</p>
             </details>
           {/if}
-          <div class="mt-4 flex gap-2">
+          {#if audioUrls[entry.id]}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <audio class="mt-3 w-full" controls src={audioUrls[entry.id]}></audio>
+          {/if}
+          <div class="mt-4 flex flex-wrap gap-2">
             <button type="button" class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15" onclick={() => copy(entry.final_text)}>
               Copy
+            </button>
+            <button
+              type="button"
+              class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
+              disabled={busyId === entry.id}
+              onclick={() => void reinsert(entry)}
+            >
+              Insert
+            </button>
+            {#if entry.has_audio}
+              {#if !audioUrls[entry.id]}
+                <button
+                  type="button"
+                  class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
+                  disabled={busyId === entry.id}
+                  onclick={() => void playAudio(entry.id)}
+                >
+                  Play
+                </button>
+              {/if}
+              <button
+                type="button"
+                class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
+                disabled={busyId === entry.id}
+                onclick={() => void retranscribe(entry.id)}
+              >
+                {busyId === entry.id ? "Working…" : "Re-transcribe"}
+              </button>
+            {/if}
+            <button
+              type="button"
+              class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
+              onclick={() => startCorrection(entry)}
+            >
+              Teach a correction
             </button>
             <button
               type="button"
@@ -172,6 +399,71 @@
               Delete
             </button>
           </div>
+
+          {#if correcting === entry.id}
+            <div class="mt-4 space-y-3 rounded-xl border border-white/10 bg-slate-950/40 p-4">
+              <p class="text-xs leading-relaxed text-slate-400">
+                Fix the words Oto got wrong. Consistent single-word corrections can become
+                permanent replacement rules — rephrasing and edits are ignored.
+              </p>
+              <textarea
+                rows="4"
+                class="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                bind:value={correction}
+              ></textarea>
+
+              {#if suggestions.length}
+                <ul class="space-y-1.5">
+                  {#each suggestions as suggestion (suggestion.from)}
+                    <li class="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        class="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900 text-sky-500"
+                        checked={accepted[suggestion.from]}
+                        onchange={(event) =>
+                          (accepted = { ...accepted, [suggestion.from]: event.currentTarget.checked })}
+                      />
+                      <code class="rounded bg-white/5 px-1.5 py-0.5 text-xs text-rose-200">{suggestion.from}</code>
+                      <span aria-hidden="true" class="text-slate-600">→</span>
+                      <code class="rounded bg-white/5 px-1.5 py-0.5 text-xs text-emerald-200">{suggestion.to}</code>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+
+              <div class="flex flex-wrap gap-2">
+                {#if suggestions.length}
+                  <button
+                    type="button"
+                    class="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+                    disabled={busyId === entry.id || !Object.values(accepted).some(Boolean)}
+                    onclick={() => void saveSuggestions()}
+                  >
+                    Save as rules
+                  </button>
+                {:else}
+                  <button
+                    type="button"
+                    class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
+                    disabled={busyId === entry.id || correction === entry.final_text}
+                    onclick={() => void findSuggestions(entry)}
+                  >
+                    {busyId === entry.id ? "Comparing…" : "Find corrections"}
+                  </button>
+                {/if}
+                <button
+                  type="button"
+                  class="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
+                  onclick={() => {
+                    correcting = null;
+                    suggestions = [];
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          {/if}
         </article>
       {/each}
     </div>

@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::time::{sleep, Duration};
 
-use crate::audio::AudioRecorder;
+use crate::audio::{AudioRecorder, CaptureTuning};
 use crate::config::{load_config, IdleBehavior};
 use crate::error::OtoError;
 use crate::injection::{
@@ -90,7 +90,13 @@ pub async fn test_microphone(app: AppHandle, state: State<'_, AppState>) -> Resu
         PipelineEvent::state(PipelineState::Listening, Some("Mic test".into())),
     );
 
-    let recorder = match AudioRecorder::start(app.clone()) {
+    // Exercise the user's real device, gain, and gate settings — a mic test that
+    // bypassed them would pass while dictation stayed silent.
+    let tuning = load_config()
+        .map(|cfg| CaptureTuning::from_config(&cfg))
+        .unwrap_or_default();
+
+    let recorder = match AudioRecorder::start(app.clone(), tuning) {
         Ok(r) => r,
         Err(e) => {
             let _ = app.emit(

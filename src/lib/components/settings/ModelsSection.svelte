@@ -153,8 +153,18 @@
 
       <label class="setting-row">
         <span class="setting-row__copy">
-          <strong>Partial results</strong>
-          <span>Show intermediate text when the engine provides it.</span>
+          <strong>Live transcription</strong>
+          <span>
+            {#if config.provider_preset === "deepgram" && config.stt_backend === "cloud"}
+              Streams audio to Deepgram while you speak, so the transcript is ready almost as soon
+              as you stop. Falls back to a single upload if the connection drops.
+            {:else if config.stt_backend === "local_whisper"}
+              Re-runs local Whisper periodically to show interim text while you speak.
+            {:else}
+              Shows intermediate text when the engine provides it. Live streaming currently
+              requires Deepgram cloud or local Whisper.
+            {/if}
+          </span>
         </span>
         <input type="checkbox" bind:checked={config.streaming_enabled} />
       </label>

@@ -72,6 +72,13 @@ input[type="range"] {
 }
 
 /* macOS window shell */
+/* First-run wizard: same theme surface as Settings, without the nav grid. */
+.oto-settings-onboarding {
+  min-height: 100dvh;
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
+
 .oto-settings {
   display: grid;
   grid-template:
