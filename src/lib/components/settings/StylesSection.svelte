@@ -33,44 +33,131 @@
   }
 </script>
 
-<section class="space-y-6">
-  <header>
-    <h2 class="text-xl font-semibold tracking-tight">Styles &amp; commands</h2>
-    <p class="mt-1 text-sm text-slate-400">Choose reusable writing guidance or edit selected text with a spoken instruction.</p>
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Styles &amp; commands</h2>
+    <p class="section__lead">
+      Standing instructions for how your dictation should read, and a way to rewrite
+      text you have already selected by saying what you want changed.
+    </p>
   </header>
 
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl">
-    <label class="block space-y-1.5">
-      <span class="text-sm font-medium text-slate-300">Active style</span>
-      <div class="select-wrap">
-        <select class="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm text-white" value={config.active_style_id ?? ""} onchange={(event) => config.active_style_id = event.currentTarget.value || null}>
-          <option value="">No preset</option>
-          {#each config.styles as style (style.id)}<option value={style.id}>{style.name}</option>{/each}
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Styles</span>
+      <p class="rack__note">
+        The active style is added to every cleanup pass. Only one applies at a time.
+      </p>
+    </div>
+
+    <label class="row">
+      <span class="row__label">Active style</span>
+      <span class="row__control select-wrap">
+        <select
+          value={config.active_style_id ?? ""}
+          onchange={(event) => (config.active_style_id = event.currentTarget.value || null)}
+        >
+          <option value="">None</option>
+          {#each config.styles as style (style.id)}
+            <option value={style.id}>{style.name}</option>
+          {/each}
         </select>
-        <IconChevronDown aria-hidden="true" size={16} stroke={1.7} />
-      </div>
+        <IconChevronDown aria-hidden="true" size={14} stroke={1.7} />
+      </span>
     </label>
 
-    <div class="space-y-3">
-      {#each config.styles as style (style.id)}
-        <article class="rounded-xl border border-white/10 bg-slate-900/40 p-4">
-          <div class="flex gap-2">
-            <input aria-label="Style name" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm font-medium" value={style.name} oninput={(event) => patchStyle(style.id, { name: event.currentTarget.value })} />
-            <button type="button" class="rounded-lg px-2 text-xs text-rose-300 hover:bg-white/10" onclick={() => { config.styles = config.styles.filter((item) => item.id !== style.id); if (config.active_style_id === style.id) config.active_style_id = null; }}>Remove</button>
+    <div class="row row--stacked row--flush">
+      <span class="row__label">Saved styles</span>
+      <div class="row__control">
+        {#if config.styles.length === 0}
+          <p class="empty">No styles yet.</p>
+        {:else}
+          <div class="items">
+            {#each config.styles as style (style.id)}
+              <article class="item">
+                <div class="style__head">
+                  <input
+                    aria-label="Style name"
+                    value={style.name}
+                    oninput={(event) => patchStyle(style.id, { name: event.currentTarget.value })}
+                  />
+                  <button
+                    type="button"
+                    class="btn-link btn-link--danger"
+                    onclick={() => {
+                      config.styles = config.styles.filter((item) => item.id !== style.id);
+                      if (config.active_style_id === style.id) config.active_style_id = null;
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <textarea
+                  aria-label="How this style should read"
+                  rows="2"
+                  placeholder="Professional, clear, and concise."
+                  value={style.prompt}
+                  oninput={(event) => patchStyle(style.id, { prompt: event.currentTarget.value })}
+                ></textarea>
+              </article>
+            {/each}
           </div>
-          <textarea aria-label="Style prompt" class="mt-2 w-full resize-y rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-slate-300" rows="2" value={style.prompt} oninput={(event) => patchStyle(style.id, { prompt: event.currentTarget.value })}></textarea>
-        </article>
-      {/each}
-      <button type="button" class="rounded-xl bg-white/10 px-4 py-2 text-sm ring-1 ring-white/15 hover:bg-white/15" onclick={addStyle}>Add style</button>
+        {/if}
+        <button type="button" class="btn btn--small style__add" onclick={addStyle}>Add a style</button>
+      </div>
     </div>
   </div>
 
-  <div class="space-y-4 rounded-2xl border border-violet-400/20 bg-violet-400/[0.06] p-6">
-    <div>
-      <h3 class="font-medium text-violet-100">Command Mode</h3>
-      <p class="mt-1 text-sm text-slate-400">Select text in any app, start Command Mode, then say something like “make this concise” or “translate this to Spanish.” The replacement uses your configured polish model.</p>
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Command mode</span>
+      <p class="rack__note">
+        Select text in any application, start command mode, then say what you want — “make this
+        shorter”, “translate this to Spanish”. The rewrite runs through your cleanup model and
+        replaces the selection.
+      </p>
     </div>
-    <button type="button" class="rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-400 disabled:opacity-50" disabled={commandBusy} onclick={startCommandMode}>{commandBusy ? "Preparing…" : "Start Command Mode"}</button>
-    {#if commandStatus}<p aria-live="polite" class="text-sm text-violet-100/90">{commandStatus}</p>{/if}
+
+    <div class="row row--switch row--flush">
+      <span class="row__copy">
+        <strong>Rewrite the current selection</strong>
+        <span>You get two seconds to refocus the other window before capture starts.</span>
+      </span>
+      <button type="button" class="btn" disabled={commandBusy} onclick={startCommandMode}>
+        {commandBusy ? "Preparing…" : "Start"}
+      </button>
+    </div>
+
+    {#if commandStatus}
+      <p aria-live="polite" class="note note--warn command-status">{commandStatus}</p>
+    {/if}
   </div>
 </section>
+
+<style>
+  .items {
+    margin: 0;
+  }
+
+  .style__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+  }
+
+  .style__head input {
+    min-width: 0;
+    flex: 1;
+    font-weight: 560;
+  }
+
+  .style__add {
+    justify-self: start;
+    margin-block-start: var(--space-xs);
+  }
+
+  .command-status {
+    margin-block-start: var(--space-sm);
+  }
+</style>

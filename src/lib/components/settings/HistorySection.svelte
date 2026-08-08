@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import type {
     AppConfig,
     HistoryEntry,
+    PipelineEvent,
     ReplacementSuggestion,
   } from "$lib/types";
 
@@ -12,7 +14,7 @@
   let status = $state<string | null>(null);
   let busyId = $state<string | null>(null);
   let clearing = $state(false);
-  /** In-app confirm — native window.confirm is unreliable in Tauri WKWebView. */
+  /** In-app confirm — native window.confirm is unreliable in Tauri's WKWebView. */
   let confirmClear = $state(false);
   let query = $state("");
   let audioUrls = $state<Record<string, string>>({});
@@ -103,7 +105,7 @@
     status = null;
     try {
       suggestions = await invoke<ReplacementSuggestion[]>("suggest_replacements", {
-        raw: entry.final_text,
+        raw: entry.raw_text,
         corrected: correction,
       });
       accepted = Object.fromEntries(suggestions.map((s) => [s.from, true]));
@@ -221,252 +223,407 @@
 
   onMount(() => {
     void refresh();
+    // A dictation finished while this panel was open — pull the new entry in
+    // instead of showing a stale list until the user navigates away and back.
+    const unlisten = listen<PipelineEvent>("pipeline://event", ({ payload }) => {
+      if (payload.type === "state" && payload.state === "done") {
+        void refresh();
+      }
+    }).catch(() => null);
+    return () => {
+      void unlisten.then((stop) => stop?.());
+    };
   });
 </script>
 
-<section class="space-y-6">
-  <header class="history-header">
-    <div>
-      <h2 class="text-xl font-semibold tracking-tight">History</h2>
-      <p class="mt-1 text-sm text-slate-400">A local scratchpad of recent dictations and command edits.</p>
-    </div>
-    {#if entries.length && !confirmClear}
-      <button type="button" class="history-clear-btn" onclick={requestClear} disabled={clearing}>
-        Clear history
-      </button>
-    {/if}
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">History</h2>
+    <p class="section__lead">
+      Everything you have dictated on this machine, kept locally so you can copy it
+      again, insert it somewhere else, or teach Oto what it misheard.
+    </p>
   </header>
 
-  {#if confirmClear}
-    <div
-      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/25 bg-rose-400/5 px-4 py-3"
-      role="alertdialog"
-      aria-labelledby="clear-history-title"
-      aria-describedby="clear-history-desc"
-    >
-      <div class="min-w-0">
-        <p id="clear-history-title" class="text-sm font-medium text-rose-100">Clear all saved dictations?</p>
-        <p id="clear-history-desc" class="mt-0.5 text-xs text-slate-400">This cannot be undone.</p>
-      </div>
-      <div class="flex shrink-0 gap-2">
-        <button type="button" class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15" onclick={cancelClear} disabled={clearing}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-rose-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-400 disabled:opacity-50"
-          onclick={clearAll}
-          disabled={clearing}
-        >
-          {clearing ? "Clearing…" : "Clear history"}
-        </button>
-      </div>
-    </div>
+  {#if !historyEnabled}
+    <p class="note note--warn">
+      New dictations are no longer being saved. What is already here stays until you delete it.
+      Turn saving back on under <strong>Privacy</strong>.
+    </p>
   {/if}
 
-  <div class="space-y-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-    <div>
-      <h3 class="text-sm font-semibold tracking-tight text-slate-200">Transcribe an audio file</h3>
-      <p class="mt-1 text-xs text-slate-500">
-        Runs a recording through the same pipeline as dictation and saves the result here. Accepts
-        wav, mp3, m4a, ogg, flac, and webm up to 25 MB.
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">From a file</span>
+      <p class="rack__note">
+        Runs a recording through the same path as a live dictation and saves the result here. Takes
+        wav, mp3, m4a, ogg, flac and webm up to 25 MB.
       </p>
     </div>
-    <div class="flex gap-2">
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder="/Users/you/recording.m4a"
-        class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 font-mono text-sm"
-        bind:value={importPath}
-      />
-      <button
-        type="button"
-        class="shrink-0 rounded-xl bg-white/10 px-4 py-2.5 text-sm hover:bg-white/15 disabled:opacity-50"
-        disabled={!importPath.trim() || busyId === "import"}
-        onclick={() => void importFile()}
-      >
-        {busyId === "import" ? "Transcribing…" : "Transcribe"}
-      </button>
+
+    <div class="row row--flush">
+      <span class="row__label">Audio file</span>
+      <div class="row__control">
+        <div class="btn-row import">
+          <input
+            type="text"
+            class="field-data import__input"
+            spellcheck="false"
+            aria-label="Path to an audio file"
+            placeholder="/Users/you/recording.m4a"
+            bind:value={importPath}
+          />
+          <button
+            type="button"
+            class="btn"
+            disabled={!importPath.trim() || busyId === "import"}
+            onclick={() => void importFile()}
+          >
+            {busyId === "import" ? "Transcribing…" : "Transcribe"}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
-  {#if entries.length > 1}
-    <input
-      type="search"
-      placeholder="Search transcripts"
-      aria-label="Search history"
-      class="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"
-      bind:value={query}
-    />
-  {/if}
-
-  {#if !historyEnabled}
-    <p class="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-100/90">
-      Saving new history is off. Existing entries below remain until deleted. Re-enable under
-      <strong>Privacy &amp; sync</strong>.
-    </p>
-  {/if}
-
-  {#if status}
-    <p
-      aria-live="polite"
-      class="text-sm {status.includes('failed') || status.includes('Failed') || status.includes('still has') ? 'text-rose-300' : 'text-slate-400'}"
-    >
-      {status}
-    </p>
-  {/if}
-
-  {#if entries.length === 0}
-    <div class="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-slate-500">
-      No saved dictations yet.
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">
+        Saved
+        {#if entries.length && !confirmClear}
+          <button
+            type="button"
+            class="btn-link btn-link--danger"
+            disabled={clearing}
+            onclick={requestClear}
+          >
+            Delete all
+          </button>
+        {/if}
+      </span>
     </div>
-  {:else if visible.length === 0}
-    <div class="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-slate-500">
-      Nothing matches “{query}”.
-    </div>
-  {:else}
-    <div class="space-y-3">
-      {#each visible as entry (entry.id)}
-        <article class="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-          <div class="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-            <span class="rounded-full bg-white/5 px-2 py-1 capitalize">{entry.mode}</span>
-            <span class="flex items-center gap-2">
-              {#if formatDuration(entry.duration_ms)}
-                <span class="tabular-nums">{formatDuration(entry.duration_ms)}</span>
-              {/if}
-              <time datetime={new Date(entry.created_at_ms).toISOString()}>
-                {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(entry.created_at_ms)}
-              </time>
-            </span>
-          </div>
-          <p class="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{entry.final_text}</p>
-          {#if entry.raw_text !== entry.final_text}
-            <details class="mt-3 text-xs text-slate-500">
-              <summary class="cursor-pointer">Raw transcript</summary>
-              <p class="mt-2 whitespace-pre-wrap">{entry.raw_text}</p>
-            </details>
-          {/if}
-          {#if audioUrls[entry.id]}
-            <!-- svelte-ignore a11y_media_has_caption -->
-            <audio class="mt-3 w-full" controls src={audioUrls[entry.id]}></audio>
-          {/if}
-          <div class="mt-4 flex flex-wrap gap-2">
-            <button type="button" class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15" onclick={() => copy(entry.final_text)}>
-              Copy
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
-              disabled={busyId === entry.id}
-              onclick={() => void reinsert(entry)}
-            >
-              Insert
-            </button>
-            {#if entry.has_audio}
-              {#if !audioUrls[entry.id]}
-                <button
-                  type="button"
-                  class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
-                  disabled={busyId === entry.id}
-                  onclick={() => void playAudio(entry.id)}
-                >
-                  Play
-                </button>
-              {/if}
-              <button
-                type="button"
-                class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
-                disabled={busyId === entry.id}
-                onclick={() => void retranscribe(entry.id)}
-              >
-                {busyId === entry.id ? "Working…" : "Re-transcribe"}
-              </button>
-            {/if}
-            <button
-              type="button"
-              class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
-              onclick={() => startCorrection(entry)}
-            >
-              Teach a correction
-            </button>
-            <button
-              type="button"
-              class="rounded-lg px-3 py-1.5 text-xs text-rose-300 hover:bg-white/10 disabled:opacity-50"
-              disabled={busyId === entry.id}
-              onclick={() => remove(entry.id)}
-            >
-              Delete
-            </button>
-          </div>
 
-          {#if correcting === entry.id}
-            <div class="mt-4 space-y-3 rounded-xl border border-white/10 bg-slate-950/40 p-4">
-              <p class="text-xs leading-relaxed text-slate-400">
-                Fix the words Oto got wrong. Consistent single-word corrections can become
-                permanent replacement rules — rephrasing and edits are ignored.
-              </p>
-              <textarea
-                rows="4"
-                class="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-                bind:value={correction}
-              ></textarea>
+    {#if confirmClear}
+      <!-- Inline rather than window.confirm, which WKWebView will not reliably
+           show from a Tauri page. -->
+      <div
+        class="clear-confirm"
+        role="alertdialog"
+        aria-labelledby="clear-history-title"
+        aria-describedby="clear-history-desc"
+      >
+        <div class="clear-confirm__copy">
+          <strong id="clear-history-title">Delete all saved dictations?</strong>
+          <span id="clear-history-desc">This cannot be undone.</span>
+        </div>
+        <div class="btn-row clear-confirm__actions">
+          <button
+            type="button"
+            class="btn btn--small btn--quiet"
+            disabled={clearing}
+            onclick={cancelClear}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn--small btn--danger"
+            disabled={clearing}
+            onclick={() => void clearAll()}
+          >
+            {clearing ? "Deleting…" : "Delete all"}
+          </button>
+        </div>
+      </div>
+    {/if}
 
-              {#if suggestions.length}
-                <ul class="space-y-1.5">
-                  {#each suggestions as suggestion (suggestion.from)}
-                    <li class="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        class="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900 text-sky-500"
-                        checked={accepted[suggestion.from]}
-                        onchange={(event) =>
-                          (accepted = { ...accepted, [suggestion.from]: event.currentTarget.checked })}
-                      />
-                      <code class="rounded bg-white/5 px-1.5 py-0.5 text-xs text-rose-200">{suggestion.from}</code>
-                      <span aria-hidden="true" class="text-slate-600">→</span>
-                      <code class="rounded bg-white/5 px-1.5 py-0.5 text-xs text-emerald-200">{suggestion.to}</code>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
+    <div class="row row--stacked row--flush">
+      <span class="row__label">
+        {entries.length}
+        {entries.length === 1 ? "dictation" : "dictations"}
+      </span>
+      <div class="row__control">
+        {#if entries.length > 1}
+          <input
+            type="search"
+            placeholder="Search transcripts"
+            aria-label="Search history"
+            bind:value={query}
+          />
+        {/if}
 
-              <div class="flex flex-wrap gap-2">
-                {#if suggestions.length}
-                  <button
-                    type="button"
-                    class="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-400 disabled:opacity-50"
-                    disabled={busyId === entry.id || !Object.values(accepted).some(Boolean)}
-                    onclick={() => void saveSuggestions()}
-                  >
-                    Save as rules
-                  </button>
-                {:else}
-                  <button
-                    type="button"
-                    class="rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15 disabled:opacity-50"
-                    disabled={busyId === entry.id || correction === entry.final_text}
-                    onclick={() => void findSuggestions(entry)}
-                  >
-                    {busyId === entry.id ? "Comparing…" : "Find corrections"}
-                  </button>
+        {#if status}
+          <p
+            aria-live="polite"
+            class="row__hint"
+            class:status-bad={status.toLowerCase().includes("failed") ||
+              status.includes("still has")}
+          >
+            {status}
+          </p>
+        {/if}
+
+        {#if entries.length === 0}
+          <p class="empty">Nothing saved yet.</p>
+        {:else if visible.length === 0}
+          <p class="empty">Nothing matches “{query}”.</p>
+        {:else}
+          <div class="items">
+            {#each visible as entry (entry.id)}
+              <article class="item entry">
+                <div class="item__head">
+                  <span class="plate-micro entry__kind">{entry.mode}</span>
+                  <span class="item__meta">
+                    {#if formatDuration(entry.duration_ms)}
+                      {formatDuration(entry.duration_ms)} ·
+                    {/if}
+                    <time datetime={new Date(entry.created_at_ms).toISOString()}>
+                      {new Intl.DateTimeFormat(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }).format(entry.created_at_ms)}
+                    </time>
+                  </span>
+                </div>
+
+                <p class="entry__text">{entry.final_text}</p>
+
+                {#if entry.raw_text !== entry.final_text}
+                  <details class="disclosure">
+                    <summary>What Oto heard first</summary>
+                    <div class="disclosure__body">
+                      <p class="entry__raw">{entry.raw_text}</p>
+                    </div>
+                  </details>
                 {/if}
-                <button
-                  type="button"
-                  class="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
-                  onclick={() => {
-                    correcting = null;
-                    suggestions = [];
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {/if}
-        </article>
-      {/each}
+
+                {#if audioUrls[entry.id]}
+                  <!-- svelte-ignore a11y_media_has_caption -->
+                  <audio class="entry__audio" controls src={audioUrls[entry.id]}></audio>
+                {/if}
+
+                <div class="btn-row">
+                  <button
+                    type="button"
+                    class="btn btn--small"
+                    onclick={() => copy(entry.final_text)}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn--small"
+                    disabled={busyId === entry.id}
+                    onclick={() => void reinsert(entry)}
+                  >
+                    Insert
+                  </button>
+                  {#if entry.has_audio}
+                    {#if !audioUrls[entry.id]}
+                      <button
+                        type="button"
+                        class="btn btn--small"
+                        disabled={busyId === entry.id}
+                        onclick={() => void playAudio(entry.id)}
+                      >
+                        Play
+                      </button>
+                    {/if}
+                    <button
+                      type="button"
+                      class="btn btn--small"
+                      disabled={busyId === entry.id}
+                      onclick={() => void retranscribe(entry.id)}
+                    >
+                      {busyId === entry.id ? "Working…" : "Transcribe again"}
+                    </button>
+                  {/if}
+                  <button
+                    type="button"
+                    class="btn btn--small"
+                    onclick={() => startCorrection(entry)}
+                  >
+                    Correct it
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn--small btn--danger"
+                    disabled={busyId === entry.id}
+                    onclick={() => remove(entry.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
+
+                {#if correcting === entry.id}
+                  <div class="subrack">
+                    <p class="field__hint">
+                      Fix the words Oto got wrong. Single words you correct the same way each time
+                      can become permanent rules; rewording is ignored.
+                    </p>
+                    <textarea rows="4" aria-label="Corrected text" bind:value={correction}></textarea>
+
+                    {#if suggestions.length}
+                      <ul class="fixes">
+                        {#each suggestions as suggestion (suggestion.from)}
+                          <li class="fix">
+                            <input
+                              type="checkbox"
+                              aria-label={`Always write ${suggestion.from} as ${suggestion.to}`}
+                              checked={accepted[suggestion.from]}
+                              onchange={(event) =>
+                                (accepted = {
+                                  ...accepted,
+                                  [suggestion.from]: event.currentTarget.checked,
+                                })}
+                            />
+                            <span class="readout-tight status-bad">{suggestion.from}</span>
+                            <span aria-hidden="true" class="fix__arrow">→</span>
+                            <span class="readout-tight status-ok">{suggestion.to}</span>
+                          </li>
+                        {/each}
+                      </ul>
+                    {/if}
+
+                    <div class="btn-row">
+                      {#if suggestions.length}
+                        <button
+                          type="button"
+                          class="btn btn--small btn--primary"
+                          disabled={busyId === entry.id ||
+                            !Object.values(accepted).some(Boolean)}
+                          onclick={() => void saveSuggestions()}
+                        >
+                          Always write it this way
+                        </button>
+                      {:else}
+                        <button
+                          type="button"
+                          class="btn btn--small"
+                          disabled={busyId === entry.id || correction === entry.final_text}
+                          onclick={() => void findSuggestions(entry)}
+                        >
+                          {busyId === entry.id ? "Comparing…" : "Find what changed"}
+                        </button>
+                      {/if}
+                      <button
+                        type="button"
+                        class="btn btn--small btn--quiet"
+                        onclick={() => {
+                          correcting = null;
+                          suggestions = [];
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
-  {/if}
+  </div>
 </section>
 
+<style>
+  .import {
+    flex-wrap: nowrap;
+  }
+
+  .import__input {
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* The confirm is part of the page, so it borrows the fault-note language — a
+     clip-red edge over a clip wash — rather than pretending to be a dialog. */
+  .clear-confirm {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-block-start: 0.875rem;
+    padding: 0.625rem 0.75rem;
+    border: var(--rule) solid var(--etch);
+    border-inline-start: 2px solid var(--signal-clip);
+    border-radius: var(--radius-control);
+    background: var(--signal-clip-wash);
+  }
+
+  .clear-confirm__copy {
+    display: grid;
+    gap: 0.125rem;
+    min-width: 0;
+  }
+
+  .clear-confirm__copy strong {
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    font-weight: 560;
+  }
+
+  .clear-confirm__copy span {
+    color: var(--muted);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+  }
+
+  .clear-confirm__actions {
+    flex-wrap: nowrap;
+  }
+
+  .entry__kind {
+    color: var(--faint);
+  }
+
+  .entry__text {
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .entry__raw {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .entry__audio {
+    width: 100%;
+    height: 2rem;
+  }
+
+  .fixes {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .fix {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--text-sm);
+  }
+
+  .fix__arrow {
+    color: var(--faint);
+  }
+
+  @media (max-width: 30rem) {
+    .import {
+      flex-wrap: wrap;
+    }
+
+    .import__input {
+      flex-basis: 100%;
+    }
+  }
+</style>

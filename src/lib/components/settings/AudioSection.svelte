@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { IconMicrophone, IconPlayerPlay, IconRefresh } from "@tabler/icons-svelte";
+  import { IconChevronDown, IconPlayerPlay, IconRefresh } from "@tabler/icons-svelte";
   import type { AppConfig, InputDevice } from "$lib/types";
+  import Meter from "../Meter.svelte";
+  import { pipelineState } from "$lib/stores/pipeline";
 
   let {
     config = $bindable(),
@@ -55,319 +57,302 @@
   });
 </script>
 
-<section class="space-y-6">
-  <header>
-    <h2 class="text-xl font-semibold tracking-tight">Audio</h2>
-    <p class="mt-1 text-sm text-slate-400">
-      Which microphone Oto records from, how the signal is conditioned before it reaches
-      speech-to-text, and when a hands-free session ends on its own.
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Audio</h2>
+    <p class="section__lead">
+      Which microphone Oto listens to, how the signal is treated on the way to the
+      speech engine, and when a hands-free session decides you are finished.
     </p>
   </header>
 
-  <!-- Input device -->
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h3 class="text-sm font-semibold tracking-tight text-slate-200">Input device</h3>
-        <p class="mt-1 text-xs text-slate-500">
-          Oto falls back to the system default if the selected device disappears.
-        </p>
-      </div>
-      <button
-        type="button"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
-        disabled={loadingDevices}
-        onclick={() => void loadDevices()}
-      >
-        <IconRefresh aria-hidden="true" size={14} stroke={1.8} />
-        {loadingDevices ? "Scanning…" : "Rescan"}
-      </button>
+  <!-- Gain and gate are set by ear and by eye, so the meter belongs here at full
+       size rather than only in the rail. -->
+  <div class="bench">
+    <div class="bench__head">
+      <span class="plate-micro">Live input</span>
+      <span class="bench__state">
+        {$pipelineState === "listening" ? "Recording" : "Silent until you dictate"}
+      </span>
     </div>
-
-    <label class="block space-y-1.5">
-      <span class="text-sm font-medium text-slate-300">Microphone</span>
-      <select
-        class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2.5 text-sm text-white outline-none transition focus:border-sky-400/50 focus:ring-2 focus:ring-sky-400/20"
-        value={config.audio.input_device ?? ""}
-        onchange={(event) => {
-          config.audio.input_device = event.currentTarget.value || null;
-        }}
-      >
-        <option value="">System default</option>
-        {#each devices as device (device.name)}
-          <option value={device.name}>
-            {device.name}{device.is_default ? " — system default" : ""}
-          </option>
-        {/each}
-        {#if missingDevice}
-          <option value={config.audio.input_device}>
-            {config.audio.input_device} (not connected)
-          </option>
-        {/if}
-      </select>
-      {#if deviceError}
-        <span class="block text-xs text-amber-200/80">Could not list devices ({deviceError}).</span>
-      {:else if missingDevice}
-        <span class="block text-xs text-amber-200/80">
-          This device is not currently connected. Oto will record from the system default until it
-          comes back.
-        </span>
-      {/if}
-    </label>
-
-    <label class="block space-y-1.5">
-      <span class="flex items-center justify-between text-sm font-medium text-slate-300">
-        <span>Input gain</span>
-        <span class="font-mono text-xs text-slate-400">{config.audio.input_gain.toFixed(2)}×</span>
-      </span>
-      <input
-        type="range"
-        min="0.25"
-        max="4"
-        step="0.05"
-        class="w-full accent-sky-400"
-        bind:value={config.audio.input_gain}
-      />
-      <span class="block text-xs text-slate-500">
-        Raise for a quiet microphone. Loud samples are clipped rather than wrapped, so overshooting
-        distorts instead of crackling.
-      </span>
-    </label>
-
-    <label
-      class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3 transition hover:border-white/20"
-    >
-      <span>
-        <span class="block text-sm font-medium text-slate-200">Noise gate</span>
-        <span class="block text-xs text-slate-500">
-          Attenuate audio that sits at the measured room-noise level. Helps with fans and keyboards;
-          the threshold adapts to your room automatically.
-        </span>
-      </span>
-      <input
-        type="checkbox"
-        class="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900 text-sky-500 focus:ring-sky-400/30"
-        bind:checked={config.audio.noise_gate}
-      />
-    </label>
+    <Meter segments={40} variant="tall" />
   </div>
 
-  <!-- Activation -->
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl">
-    <div>
-      <h3 class="text-sm font-semibold tracking-tight text-slate-200">Activation</h3>
-      <p class="mt-1 text-xs text-slate-500">How the hotkey starts and stops a dictation.</p>
-    </div>
-
-    <div class="space-y-2">
-      {#each [
-        {
-          value: "hold",
-          title: "Hold to talk",
-          detail: "Press and hold while speaking, release to transcribe. The 0.1.0 behaviour.",
-        },
-        {
-          value: "toggle",
-          title: "Toggle",
-          detail: "Press once to start, press again to stop. Hands-free while you speak.",
-        },
-        {
-          value: "hybrid",
-          title: "Hybrid",
-          detail: "A quick tap toggles; holding the key past the tap threshold behaves like push-to-talk.",
-        },
-      ] as const as option (option.value)}
-        <label
-          class="flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition"
-          class:border-sky-400={config.activation_mode === option.value}
-          class:bg-sky-400={config.activation_mode === option.value}
-          class:bg-opacity-10={config.activation_mode === option.value}
-          class:border-white={config.activation_mode !== option.value}
-          class:border-opacity-10={config.activation_mode !== option.value}
-        >
-          <input
-            type="radio"
-            name="activation-mode"
-            value={option.value}
-            class="mt-0.5 h-4 w-4 shrink-0 border-white/20 bg-slate-900 text-sky-500 focus:ring-sky-400/30"
-            bind:group={config.activation_mode}
-          />
-          <span class="min-w-0">
-            <span class="block text-sm font-medium text-slate-200">{option.title}</span>
-            <span class="block text-xs text-slate-500">{option.detail}</span>
-          </span>
-        </label>
-      {/each}
-    </div>
-
-    {#if config.activation_mode === "hybrid"}
-      <label class="block space-y-1.5">
-        <span class="flex items-center justify-between text-sm font-medium text-slate-300">
-          <span>Tap threshold</span>
-          <span class="font-mono text-xs text-slate-400">{config.hybrid_tap_threshold_ms} ms</span>
-        </span>
-        <input
-          type="range"
-          min="120"
-          max="1000"
-          step="10"
-          class="w-full accent-sky-400"
-          bind:value={config.hybrid_tap_threshold_ms}
-        />
-        <span class="block text-xs text-slate-500">
-          Releases faster than this count as a tap and leave the session running.
-        </span>
-      </label>
-    {/if}
-  </div>
-
-  <!-- Auto-stop -->
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl">
-    <div>
-      <h3 class="text-sm font-semibold tracking-tight text-slate-200">Silence detection</h3>
-      <p class="mt-1 text-xs text-slate-500">
-        Ends a hands-free session once you stop speaking. Never applies while the hotkey is held —
-        a held key always ends on its own release.
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">
+        Input
+        <button type="button" class="btn btn--small" disabled={loadingDevices} onclick={() => void loadDevices()}>
+          <IconRefresh aria-hidden="true" size={13} stroke={1.8} />
+          {loadingDevices ? "Scanning…" : "Rescan"}
+        </button>
+      </span>
+      <p class="rack__note">
+        If the chosen device disappears, Oto falls back to your system default.
       </p>
     </div>
 
-    <label
-      class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3 transition hover:border-white/20"
-    >
-      <span>
-        <span class="block text-sm font-medium text-slate-200">Stop after silence</span>
-        <span class="block text-xs text-slate-500">
-          Applies to Toggle and to hybrid taps.
-        </span>
+    <label class="row">
+      <span class="row__label">Microphone</span>
+      <span class="row__control select-wrap">
+        <select
+          value={config.audio.input_device ?? ""}
+          onchange={(event) => {
+            config.audio.input_device = event.currentTarget.value || null;
+          }}
+        >
+          <option value="">System default</option>
+          {#each devices as device (device.name)}
+            <option value={device.name}>
+              {device.name}{device.is_default ? " — system default" : ""}
+            </option>
+          {/each}
+          {#if missingDevice}
+            <option value={config.audio.input_device}>
+              {config.audio.input_device} (not connected)
+            </option>
+          {/if}
+        </select>
+        <IconChevronDown aria-hidden="true" size={14} stroke={1.7} />
+        {#if deviceError}
+          <span class="row__hint status-warn">Could not list devices ({deviceError}).</span>
+        {:else if missingDevice}
+          <span class="row__hint status-warn">
+            Not connected right now. Oto records from the system default until it returns.
+          </span>
+        {/if}
       </span>
-      <input
-        type="checkbox"
-        class="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900 text-sky-500 focus:ring-sky-400/30"
-        bind:checked={config.vad.auto_stop}
-      />
     </label>
 
-    {#if config.vad.auto_stop}
-      <label class="block space-y-1.5">
-        <span class="flex items-center justify-between text-sm font-medium text-slate-300">
-          <span>Trailing silence</span>
-          <span class="font-mono text-xs text-slate-400">
-            {(config.vad.silence_ms / 1000).toFixed(1)} s
-          </span>
+    <label class="row">
+      <span class="row__label">Gain</span>
+      <span class="row__control">
+        <span class="slider-head">
+          <span class="row__hint">Raise it for a quiet microphone.</span>
+          <span class="slider-value">{config.audio.input_gain.toFixed(2)}×</span>
         </span>
-        <input
-          type="range"
-          min="400"
-          max="5000"
-          step="100"
-          class="w-full accent-sky-400"
-          bind:value={config.vad.silence_ms}
-        />
-        <span class="block text-xs text-slate-500">
-          Shorter feels snappier but can cut you off mid-thought.
+        <input type="range" min="0.25" max="4" step="0.05" bind:value={config.audio.input_gain} />
+        <span class="row__hint">
+          Loud samples clip rather than wrap, so too much gain distorts instead of crackling. Watch
+          the meter above stay out of the red while you talk.
         </span>
-      </label>
+      </span>
+    </label>
 
-      <label class="block space-y-1.5">
-        <span class="flex items-center justify-between text-sm font-medium text-slate-300">
-          <span>Minimum speech</span>
-          <span class="font-mono text-xs text-slate-400">{config.vad.min_speech_ms} ms</span>
+    <label class="row row--switch row--flush">
+      <span class="row__copy">
+        <strong>Noise gate</strong>
+        <span>
+          Quietens audio sitting at the level of your room. Good against fans and keyboards; the
+          threshold learns your room on its own.
         </span>
-        <input
-          type="range"
-          min="0"
-          max="2000"
-          step="50"
-          class="w-full accent-sky-400"
-          bind:value={config.vad.min_speech_ms}
-        />
-        <span class="block text-xs text-slate-500">
-          Speech required before auto-stop can fire, so a cough or a slow start does not end the
-          session.
+      </span>
+      <input type="checkbox" bind:checked={config.audio.noise_gate} />
+    </label>
+  </div>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Activation</span>
+      <p class="rack__note">How the shortcut starts and ends a dictation.</p>
+    </div>
+
+    <div class="row row--stacked">
+      <span class="row__label">Mode</span>
+      <div class="row__control choice-list">
+        {#each [
+          {
+            value: "hold",
+            title: "Hold to talk",
+            detail: "Hold the chord while you speak; releasing it transcribes.",
+          },
+          {
+            value: "toggle",
+            title: "Toggle",
+            detail: "Press once to start and again to stop. Hands free in between.",
+          },
+          {
+            value: "hybrid",
+            title: "Hybrid",
+            detail: "A quick tap toggles; holding past the threshold behaves like push-to-talk.",
+          },
+        ] as const as option (option.value)}
+          <label class="choice" data-active={config.activation_mode === option.value}>
+            <input
+              type="radio"
+              name="activation-mode"
+              value={option.value}
+              bind:group={config.activation_mode}
+            />
+            <span class="choice__copy">
+              <strong>{option.title}</strong>
+              <span>{option.detail}</span>
+            </span>
+          </label>
+        {/each}
+      </div>
+    </div>
+
+    {#if config.activation_mode === "hybrid"}
+      <label class="row row--flush">
+        <span class="row__label">Tap threshold</span>
+        <span class="row__control">
+          <span class="slider-head">
+            <span class="row__hint">Releases quicker than this count as a tap.</span>
+            <span class="slider-value">{config.hybrid_tap_threshold_ms} ms</span>
+          </span>
+          <input type="range" min="120" max="1000" step="10" bind:value={config.hybrid_tap_threshold_ms} />
         </span>
       </label>
     {/if}
   </div>
 
-  <!-- Sound cues -->
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl">
-    <div>
-      <h3 class="text-sm font-semibold tracking-tight text-slate-200">Sound cues</h3>
-      <p class="mt-1 text-xs text-slate-500">
-        Short tones marking session transitions — useful when the overlay is hidden or you are
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Silence</span>
+      <p class="rack__note">
+        Ends a hands-free session once you stop talking. A held chord always ends on its own
+        release, whatever this says.
+      </p>
+    </div>
+
+    <label class="row row--switch" class:row--flush={!config.vad.auto_stop}>
+      <span class="row__copy">
+        <strong>Stop when I stop talking</strong>
+        <span>Applies to Toggle, and to taps in Hybrid.</span>
+      </span>
+      <input type="checkbox" bind:checked={config.vad.auto_stop} />
+    </label>
+
+    {#if config.vad.auto_stop}
+      <label class="row">
+        <span class="row__label">Trailing silence</span>
+        <span class="row__control">
+          <span class="slider-head">
+            <span class="row__hint">Shorter feels quicker but can cut you off mid-thought.</span>
+            <span class="slider-value">{(config.vad.silence_ms / 1000).toFixed(1)} s</span>
+          </span>
+          <input type="range" min="400" max="5000" step="100" bind:value={config.vad.silence_ms} />
+        </span>
+      </label>
+
+      <label class="row row--flush">
+        <span class="row__label">Minimum speech</span>
+        <span class="row__control">
+          <span class="slider-head">
+            <span class="row__hint">Stops a cough or a slow start from ending the session.</span>
+            <span class="slider-value">{config.vad.min_speech_ms} ms</span>
+          </span>
+          <input type="range" min="0" max="2000" step="50" bind:value={config.vad.min_speech_ms} />
+        </span>
+      </label>
+    {/if}
+  </div>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Cues</span>
+      <p class="rack__note">
+        Short tones for each transition — worth having when the overlay is hidden or you are
         looking at another window.
       </p>
     </div>
 
-    <label
-      class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3 transition hover:border-white/20"
-    >
-      <span>
-        <span class="block text-sm font-medium text-slate-200">Play sound cues</span>
-        <span class="block text-xs text-slate-500">Rendered on the fly; no audio files involved.</span>
+    <label class="row row--switch" class:row--flush={!config.sounds.enabled}>
+      <span class="row__copy">
+        <strong>Play cues</strong>
+        <span>Synthesised as they play. No audio files involved.</span>
       </span>
-      <input
-        type="checkbox"
-        class="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900 text-sky-500 focus:ring-sky-400/30"
-        bind:checked={config.sounds.enabled}
-      />
+      <input type="checkbox" bind:checked={config.sounds.enabled} />
     </label>
 
     {#if config.sounds.enabled}
-      <label class="block space-y-1.5">
-        <span class="flex items-center justify-between text-sm font-medium text-slate-300">
-          <span>Volume</span>
-          <span class="font-mono text-xs text-slate-400">
-            {Math.round(config.sounds.volume * 100)}%
+      <label class="row">
+        <span class="row__label">Volume</span>
+        <span class="row__control">
+          <span class="slider-head">
+            <span class="row__hint">Relative to your system output.</span>
+            <span class="slider-value">{Math.round(config.sounds.volume * 100)}%</span>
           </span>
+          <input type="range" min="0" max="1" step="0.05" bind:value={config.sounds.volume} />
         </span>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
-          class="w-full accent-sky-400"
-          bind:value={config.sounds.volume}
-        />
       </label>
 
-      <div class="space-y-2">
-        {#each cues as cue (cue.id)}
-          <div
-            class="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-2.5"
-          >
-            <label class="flex flex-1 cursor-pointer items-center gap-3">
-              <input
-                type="checkbox"
-                class="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900 text-sky-500 focus:ring-sky-400/30"
-                bind:checked={config.sounds[cue.key]}
-              />
-              <span class="text-sm text-slate-200">{cue.label}</span>
-            </label>
-            <button
-              type="button"
-              class="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 transition hover:bg-white/10"
-              onclick={() => void previewCue(cue.id)}
-            >
-              <IconPlayerPlay aria-hidden="true" size={13} stroke={1.8} />
-              Preview
-            </button>
-          </div>
-        {/each}
+      <div class="row row--stacked row--flush">
+        <span class="row__label">Play on</span>
+        <div class="row__control cues">
+          {#each cues as cue (cue.id)}
+            <div class="cue">
+              <label class="cue__toggle">
+                <input type="checkbox" bind:checked={config.sounds[cue.key]} />
+                <span>{cue.label}</span>
+              </label>
+              <button
+                type="button"
+                class="btn btn--small"
+                onclick={() => void previewCue(cue.id)}
+              >
+                <IconPlayerPlay aria-hidden="true" size={12} stroke={1.8} />
+                Hear it
+              </button>
+            </div>
+          {/each}
+        </div>
       </div>
     {/if}
   </div>
 
-  <div
-    class="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4 text-xs leading-relaxed text-slate-400"
-  >
-    <span class="mt-0.5 shrink-0 text-slate-500">
-      <IconMicrophone aria-hidden="true" size={18} stroke={1.7} />
-    </span>
-    <p>
-      Use <strong class="text-slate-300">Permissions → Test microphone</strong> after changing these
-      settings. The test records through the same device, gain, and gate that dictation uses, so a
-      passing test means dictation will hear you too.
-    </p>
-  </div>
+  <p class="note">
+    After changing anything here, run <strong>Permissions → Test microphone</strong>. The test
+    records through this same device, gain and gate, so a test that passes means dictation will
+    hear you too.
+  </p>
 </section>
+
+<style>
+  .bench {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 0.875rem 0.875rem;
+    border: var(--rule) solid var(--etch);
+    border-radius: var(--radius-panel);
+    background: var(--well);
+  }
+
+  .bench__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    color: var(--faint);
+  }
+
+  .bench__state {
+    color: var(--muted);
+    font-size: var(--text-xs);
+  }
+
+  .cues {
+    gap: 2px;
+  }
+
+  .cue {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: 0.4375rem 0.625rem;
+    border: var(--rule) solid var(--etch);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+  }
+
+  .cue__toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex: 1;
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+  }
+</style>

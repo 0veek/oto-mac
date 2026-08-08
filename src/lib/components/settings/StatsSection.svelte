@@ -37,92 +37,105 @@
   });
 </script>
 
-<section class="space-y-6">
-  <header>
-    <h2 class="text-xl font-semibold tracking-tight">Stats</h2>
-    <p class="mt-1 text-sm text-slate-400">
-      Computed from your local history — nothing is uploaded, and nothing is tracked separately.
-      Turning history off under Privacy turns these off too.
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Stats</h2>
+    <p class="section__lead">
+      Counted from the history on this machine. Nothing is uploaded and nothing is
+      tracked separately — turning history off under Privacy empties this page too.
     </p>
   </header>
 
   {#if error}
-    <p class="rounded-xl border border-rose-400/25 bg-rose-400/5 px-4 py-3 text-sm text-rose-200">
-      Could not read history ({error}).
-    </p>
+    <p class="note note--bad">Could not read history ({error}).</p>
   {:else if !stats}
-    <p class="text-sm text-slate-500">Loading…</p>
+    <p class="loading">Reading history…</p>
   {:else if stats.total_sessions === 0}
-    <div class="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-slate-500">
-      No dictations recorded yet.
-    </div>
+    <p class="empty">Nothing dictated yet. Hold your shortcut and say something.</p>
   {:else}
-    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="tiles">
       {#each [
-        { label: "Words dictated", value: numberFormat.format(stats.total_words) },
-        { label: "Dictations", value: numberFormat.format(stats.total_sessions) },
-        { label: "Words today", value: numberFormat.format(stats.words_today) },
+        { label: "Words", value: numberFormat.format(stats.total_words), unit: "total" },
+        { label: "Dictations", value: numberFormat.format(stats.total_sessions), unit: "" },
+        { label: "Today", value: numberFormat.format(stats.words_today), unit: "words" },
         {
-          label: "Average length",
-          value: `${Math.round(stats.average_words_per_session)} words`,
+          label: "Typical length",
+          value: String(Math.round(stats.average_words_per_session)),
+          unit: "words",
         },
       ] as tile (tile.label)}
-        <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur-xl">
-          <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{tile.label}</p>
-          <p class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-slate-100">
+        <div class="tile">
+          <span class="plate-micro tile__label">{tile.label}</span>
+          <span class="tile__value">
             {tile.value}
-          </p>
+            {#if tile.unit}<span class="tile__unit">{tile.unit}</span>{/if}
+          </span>
         </div>
       {/each}
     </div>
 
-    <div class="grid gap-3 sm:grid-cols-2">
-      <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur-xl">
-        <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Time saved</p>
-        <p class="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-slate-100">
-          {formatMinutes(stats.estimated_minutes_saved)}
-        </p>
-        <p class="mt-2 text-xs leading-relaxed text-slate-500">
-          Versus typing the same words at 40 wpm, against 150 wpm of speech. An estimate, not a
+    <div class="tiles">
+      <div class="tile">
+        <span class="plate-micro tile__label">Time saved</span>
+        <span class="tile__value">{formatMinutes(stats.estimated_minutes_saved)}</span>
+        <p class="tile__note">
+          Against typing the same words at 40 wpm, speaking at 150. An estimate, not a
           measurement.
         </p>
       </div>
 
-      <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur-xl">
-        <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Streak</p>
-        <p class="mt-1.5 flex items-baseline gap-2 text-2xl font-semibold tabular-nums tracking-tight text-slate-100">
+      <div class="tile">
+        <span class="plate-micro tile__label">Streak</span>
+        <span class="tile__value">
           {#if stats.current_streak_days > 0}
-            <span class="text-amber-300"><IconFlame aria-hidden="true" size={22} stroke={1.8} /></span>
+            <span class="tile__flame"><IconFlame aria-hidden="true" size={18} stroke={1.9} /></span>
           {/if}
           {stats.current_streak_days}
-          <span class="text-sm font-normal text-slate-500">
-            {stats.current_streak_days === 1 ? "day" : "days"}
-          </span>
-        </p>
-        <p class="mt-2 text-xs text-slate-500">Best run: {stats.best_streak_days} days.</p>
+          <span class="tile__unit">{stats.current_streak_days === 1 ? "day" : "days"}</span>
+        </span>
+        <p class="tile__note">Your best run so far is {stats.best_streak_days} days.</p>
       </div>
     </div>
 
-    <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl">
-      <h3 class="text-sm font-semibold tracking-tight text-slate-200">Last 30 days</h3>
-      <div class="mt-5 flex h-32 items-end gap-1" role="img" aria-label="Words dictated per day over the last 30 days">
-        {#each series as day (day.days_ago)}
-          <div
-            class="min-w-0 flex-1 rounded-t transition-colors"
-            class:bg-sky-400={day.words > 0}
-            class:bg-white={day.words === 0}
-            class:opacity-10={day.words === 0}
-            style="height: {day.words > 0 ? Math.max(4, (day.words / peak) * 100) : 3}%"
-            title="{day.days_ago === 0
-              ? 'Today'
-              : `${day.days_ago} day${day.days_ago === 1 ? '' : 's'} ago`}: {day.words} words"
-          ></div>
-        {/each}
+    <div class="rack">
+      <div class="rack__head">
+        <span class="plate-micro rack__title">Last 30 days</span>
       </div>
-      <div class="mt-2 flex justify-between text-xs text-slate-600">
-        <span>30 days ago</span>
-        <span>Today</span>
+      <div class="chart">
+        <div
+          class="bars"
+          role="img"
+          aria-label="Words dictated per day over the last 30 days"
+        >
+          {#each series as day (day.days_ago)}
+            <div
+              class="bars__bar"
+              data-empty={day.words === 0}
+              data-today={day.days_ago === 0}
+              style="height: {day.words > 0 ? Math.max(4, (day.words / peak) * 100) : 2}%"
+              title="{day.days_ago === 0
+                ? 'Today'
+                : `${day.days_ago} day${day.days_ago === 1 ? '' : 's'} ago`}: {day.words} words"
+            ></div>
+          {/each}
+        </div>
+        <div class="plate-micro bars__scale">
+          <span>30 days ago</span>
+          <span>{numberFormat.format(peak)} words peak</span>
+          <span>Today</span>
+        </div>
       </div>
     </div>
   {/if}
 </section>
+
+<style>
+  .chart {
+    padding-block-start: var(--space-md);
+  }
+
+  .tile__flame {
+    display: inline-flex;
+    color: var(--lamp);
+  }
+</style>

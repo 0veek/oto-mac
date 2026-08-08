@@ -4,15 +4,17 @@
   import FloatingPill from "$lib/components/FloatingPill.svelte";
   import { applyPipelineEvent } from "$lib/stores/pipeline";
   import type { AppConfig, PipelineEvent } from "$lib/types";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { invoke } from "@tauri-apps/api/core";
   import { applyTheme } from "$lib/theme";
 
   // Window show/hide is owned by the Rust pipeline. The frontend must NOT
   // call hide() on mount — a cold-start overlay loads with state "idle" and
   // would immediately hide itself, racing the Listening event.
-
-  let posTimer: ReturnType<typeof setTimeout> | null = null;
+  //
+  // Drag position is persisted by the Rust `WindowEvent::Moved` handler in
+  // lib.rs, which macOS reaches through `performWindowDragWithEvent`. Doing it
+  // here as well ran two independent load-modify-save cycles over config.json
+  // at once, which could drop unrelated fields.
 
   onMount(() => {
     document.documentElement.dataset.surface = "overlay";
@@ -21,36 +23,16 @@
     void invoke<AppConfig>("get_config")
       .then((config) => applyTheme(config.theme, config.reduce_motion, config.font_scale))
       .catch(() => {});
+    // `.catch` is attached at subscribe time: outside a Tauri webview `listen`
+    // rejects immediately and would surface as an unhandled rejection.
     const unlistenPromise = listen<PipelineEvent>("pipeline://event", (e) => {
       applyPipelineEvent(e.payload);
-    });
-
-    // Persist overlay position after user drag (skip 0,0 noise from first map).
-    let unlistenMoved: (() => void) | undefined;
-    void (async () => {
-      try {
-        const win = getCurrentWindow();
-        unlistenMoved = await win.onMoved(({ payload }) => {
-          if (payload.x === 0 && payload.y === 0) return;
-          if (posTimer) clearTimeout(posTimer);
-          posTimer = setTimeout(() => {
-            void invoke("set_overlay_position", {
-              x: payload.x,
-              y: payload.y,
-            });
-          }, 350);
-        });
-      } catch {
-        // no Tauri
-      }
-    })();
+    }).catch(() => null);
 
     return () => {
       delete document.documentElement.dataset.surface;
       delete document.body.dataset.surface;
-      unlistenPromise.then((u) => u());
-      unlistenMoved?.();
-      if (posTimer) clearTimeout(posTimer);
+      void unlistenPromise.then((stop) => stop?.());
     };
   });
 </script>

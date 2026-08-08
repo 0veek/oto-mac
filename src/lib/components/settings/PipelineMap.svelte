@@ -1,35 +1,58 @@
 <script lang="ts">
-  import {
-    IconCursorText,
-    IconMicrophone,
-    IconSparkles,
-    IconWaveSine,
-  } from "@tabler/icons-svelte";
+  import type { AppConfig } from "$lib/types";
 
-  const stages = [
-    { id: "listen", label: "1. Listen", hint: "Capture microphone audio", icon: IconMicrophone },
-    { id: "transcribe", label: "2. Transcribe", hint: "Convert speech to text", icon: null },
-    { id: "polish", label: "3. Polish", hint: "Refine grammar and tone", icon: IconSparkles },
-    { id: "insert", label: "4. Insert", hint: "Place text at the cursor", icon: IconCursorText },
-  ];
+  let { config }: { config: AppConfig } = $props();
+
+  const INJECTION_LABELS: Record<string, string> = {
+    auto: "Automatic",
+    direct_type: "Typed",
+    clipboard_paste: "Clipboard + paste",
+    clipboard_only: "Clipboard only",
+  };
+
+  const activeProfile = $derived(
+    config.provider_preset === "custom" && config.active_custom_provider_id
+      ? (config.custom_providers.find((p) => p.id === config.active_custom_provider_id) ?? null)
+      : null,
+  );
+
+  // The chain reports what is actually configured, so it stays a readout rather
+  // than a diagram of the idea of a pipeline.
+  const stages = $derived([
+    {
+      name: "Capture",
+      value: config.audio.input_device ?? "System default",
+      active: true,
+    },
+    {
+      name: "Transcribe",
+      value:
+        config.stt_backend === "local_whisper"
+          ? "Local Whisper"
+          : (activeProfile?.stt_model || config.stt_model || "Not set"),
+      active: true,
+    },
+    {
+      name: "Clean up",
+      value: config.polish_enabled
+        ? (activeProfile?.polish_model || config.polish_model || "Not set")
+        : "Off",
+      active: config.polish_enabled,
+    },
+    {
+      name: "Insert",
+      value: INJECTION_LABELS[config.injection_mode] ?? config.injection_mode,
+      active: true,
+    },
+  ]);
 </script>
 
-<div class="pipeline-map" aria-label="Oto dictation pipeline">
-  {#each stages as stage, index (stage.id)}
-    <div class="pipeline-stage" class:pipeline-stage--active={stage.id === "transcribe"}>
-      <div class="pipeline-stage__icon">
-        {#if stage.icon}
-          {@const StageIcon = stage.icon}
-          <StageIcon aria-hidden="true" size={26} stroke={1.45} />
-        {:else}
-          <img src="/favicon.png" alt="" width="46" height="46" />
-        {/if}
-      </div>
-      <strong>{stage.label}</strong>
-      <span>{stage.hint}</span>
-      {#if index < stages.length - 1}
-        <IconWaveSine class="pipeline-stage__arrow" aria-hidden="true" size={20} stroke={1.25} />
-      {/if}
+<div class="chain" aria-label="Configured dictation path">
+  {#each stages as stage, index (stage.name)}
+    <div class="chain__stage" data-active={stage.active}>
+      <span class="plate-micro chain__index">{String(index + 1).padStart(2, "0")}</span>
+      <span class="chain__name">{stage.name}</span>
+      <span class="chain__value" title={stage.value}>{stage.value}</span>
     </div>
   {/each}
 </div>

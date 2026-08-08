@@ -14,6 +14,10 @@
   let previewBusy = $state(false);
   let micBusy = $state(false);
   let status = $state<string | null>(null);
+
+  // Launch at login is not a config field on macOS: the login item lives in the
+  // system's own registry, so the plugin is the single source of truth and this
+  // control writes through immediately rather than waiting for Save.
   let launchAtLogin = $state(false);
   let launchBusy = $state(false);
   let launchError = $state<string | null>(null);
@@ -103,26 +107,27 @@
   }
 </script>
 
-<section class="space-y-6">
-  <header>
-    <h2 class="text-xl font-semibold tracking-tight">Appearance</h2>
-    <p class="mt-1 text-sm text-slate-400">
-      Startup, overlay idle behavior, and quick UI previews without a full dictation run.
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Appearance</h2>
+    <p class="section__lead">
+      Startup, overlay idle behavior, and quick UI previews without a full
+      dictation run.
     </p>
   </header>
 
-  <div
-    class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl"
-  >
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Startup</span>
+    </div>
+
     <label
-      class="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3"
-      class:opacity-50={!launchAvailable || launchBusy}
+      class="row row--switch row--flush launch"
+      data-live={launchAvailable && !launchBusy}
     >
-      <span>
-        <span class="block text-sm font-medium text-slate-200">Launch at login</span>
-        <span class="block text-xs text-slate-500">
-          Start Oto in the menu bar when you sign in to macOS. Applies immediately.
-        </span>
+      <span class="row__copy">
+        <strong>Launch at login</strong>
+        <span>Start Oto in the menu bar when you sign in to macOS. Applies immediately.</span>
       </span>
       <input
         type="checkbox"
@@ -133,93 +138,128 @@
         }}
       />
     </label>
-    {#if launchError}
-      <p class="text-sm text-rose-400" role="alert">{launchError}</p>
-    {/if}
 
-    <div class="grid gap-4 sm:grid-cols-2">
-      <label class="block space-y-1.5">
-        <span class="text-sm font-medium text-slate-300">Theme</span>
-        <div class="select-wrap">
-          <select class="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm text-white" bind:value={config.theme}>
-            {#each THEMES as theme}<option value={theme.value}>{theme.label}</option>{/each}
-          </select>
-          <IconChevronDown aria-hidden="true" size={16} stroke={1.7} />
-        </div>
-      </label>
-      <label class="block space-y-1.5">
-        <span class="text-sm font-medium text-slate-300">Text size · {Math.round(config.font_scale * 100)}%</span>
-        <input class="w-full accent-sky-400" type="range" min="0.85" max="1.25" step="0.05" bind:value={config.font_scale} />
-      </label>
+    {#if launchError}
+      <p class="note note--bad appearance-status" role="alert">{launchError}</p>
+    {/if}
+  </div>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Display</span>
     </div>
 
-    <label class="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3">
-      <span><span class="block text-sm font-medium text-slate-200">Reduce motion</span><span class="block text-xs text-slate-500">Disable non-essential pulses and transitions.</span></span>
-      <input type="checkbox" bind:checked={config.reduce_motion} />
+    <label class="row">
+      <span class="row__label">Theme</span>
+      <span class="row__control select-wrap">
+        <select bind:value={config.theme}>
+          {#each THEMES as theme (theme.value)}
+            <option value={theme.value}>{theme.label}</option>
+          {/each}
+        </select>
+        <IconChevronDown aria-hidden="true" size={14} stroke={1.7} />
+      </span>
     </label>
 
-    <fieldset class="space-y-3">
-      <legend class="text-sm font-medium text-slate-300">When idle</legend>
-      {#each IDLE_OPTIONS as opt (opt.value)}
-        <label
-          class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3 transition hover:border-white/20 {config.idle_behavior ===
-          opt.value
-            ? 'ring-1 ring-sky-400/40'
-            : ''}"
-        >
-          <input
-            type="radio"
-            name="idle_behavior"
-            class="mt-1 h-4 w-4 border-white/20 bg-slate-900 text-sky-500 focus:ring-sky-400/30"
-            value={opt.value}
-            checked={config.idle_behavior === opt.value}
-            onchange={() => {
-              config.idle_behavior = opt.value;
-            }}
-          />
-          <span>
-            <span class="block text-sm font-medium text-slate-200">{opt.label}</span>
-            <span class="block text-xs text-slate-500">{opt.hint}</span>
-          </span>
-        </label>
-      {/each}
-    </fieldset>
+    <label class="row">
+      <span class="row__label">Text size</span>
+      <span class="row__control">
+        <span class="slider-head">
+          <span class="row__hint">Scales everything in this window.</span>
+          <span class="slider-value">{Math.round(config.font_scale * 100)}%</span>
+        </span>
+        <input type="range" min="0.85" max="1.25" step="0.05" bind:value={config.font_scale} />
+      </span>
+    </label>
 
-    <div class="space-y-3 border-t border-white/10 pt-4">
-      <div>
-        <div class="text-sm font-medium text-slate-200">Preview &amp; mic test</div>
-        <p class="mt-0.5 text-xs text-slate-500">
-          Preview sends mock listening levels. Mic test opens the default input for ~2s and
-          streams real levels to the overlay.
-        </p>
+    <label class="row row--switch row--flush">
+      <span class="row__copy">
+        <strong>Reduce motion</strong>
+        <span>Stops the pulses and transitions that are not carrying information.</span>
+      </span>
+      <input type="checkbox" bind:checked={config.reduce_motion} />
+    </label>
+  </div>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Overlay</span>
+    </div>
+
+    <div class="row row--stacked row--flush" role="radiogroup" aria-label="Between dictations">
+      <span class="row__label">Between dictations</span>
+      <div class="row__control choice-list">
+        {#each IDLE_OPTIONS as opt (opt.value)}
+          <label class="choice" data-active={config.idle_behavior === opt.value}>
+            <input
+              type="radio"
+              name="idle_behavior"
+              value={opt.value}
+              checked={config.idle_behavior === opt.value}
+              onchange={() => {
+                config.idle_behavior = opt.value;
+              }}
+            />
+            <span class="choice__copy">
+              <strong>{opt.label}</strong>
+              <span>{opt.hint}</span>
+            </span>
+          </label>
+        {/each}
       </div>
-      <div class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          class="rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/15 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={previewBusy}
-          onclick={previewListening}
-        >
-          {previewBusy ? "Previewing…" : "Preview listening UI"}
-        </button>
-        <button
-          type="button"
-          class="rounded-xl bg-sky-500/90 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={micBusy}
-          onclick={testMic}
-        >
-          {micBusy ? "Listening…" : "Test microphone"}
-        </button>
-      </div>
-      {#if status}
-        <p
-          class="text-sm {status.includes('failed') || status.includes('Failed')
-            ? 'text-rose-400'
-            : 'text-slate-300'}"
-        >
-          {status}
-        </p>
-      {/if}
     </div>
   </div>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Check the overlay</span>
+    </div>
+
+    <div class="row row--switch">
+      <span class="row__copy">
+        <strong>Show a fake dictation</strong>
+        <span>Drives the overlay with invented levels so you can see where it sits.</span>
+      </span>
+      <button type="button" class="btn" disabled={previewBusy} onclick={previewListening}>
+        {previewBusy ? "Showing…" : "Show it"}
+      </button>
+    </div>
+
+    <div class="row row--switch row--flush">
+      <span class="row__copy">
+        <strong>Test the microphone</strong>
+        <span>Opens your input for about two seconds and sends real levels to the overlay.</span>
+      </span>
+      <button type="button" class="btn" disabled={micBusy} onclick={testMic}>
+        {micBusy ? "Listening…" : "Listen"}
+      </button>
+    </div>
+
+    {#if status}
+      <p
+        class="note appearance-status"
+        class:note--bad={status.toLowerCase().includes("failed")}
+      >
+        {status}
+      </p>
+    {/if}
+  </div>
 </section>
+
+<style>
+  .appearance-status {
+    margin-block-start: var(--space-sm);
+  }
+
+  /* In-flight or unavailable (browser preview has no plugin bindings): the copy
+     drops to the faint ink and the row stops reading as a live control. The
+     switch itself is disabled, which the shell already dims. */
+  .launch[data-live="false"] {
+    cursor: default;
+  }
+
+  .launch[data-live="false"] strong,
+  .launch[data-live="false"] .row__copy span {
+    color: var(--faint);
+  }
+</style>

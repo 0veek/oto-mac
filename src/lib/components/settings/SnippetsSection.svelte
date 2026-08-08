@@ -10,14 +10,37 @@
     return globalThis.crypto?.randomUUID?.() ?? `snippet-${Date.now()}`;
   }
 
+  /**
+   * Mirror the backend matcher (features/snippets.rs): triggers are compared
+   * case-insensitively with edge punctuation stripped, an optional spoken
+   * "snippet" prefix removed, and whitespace collapsed. Comparing raw strings
+   * let two triggers that match the same utterance coexist, so only the first
+   * could ever fire.
+   */
+  function normalizeTrigger(value: string) {
+    return value
+      .trim()
+      .replace(/^[.,!?:;"']+|[.,!?:;"']+$/g, "")
+      .toLowerCase()
+      .replace(/^snippet\s+/, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .join(" ");
+  }
+
   function addSnippet() {
     error = null;
     if (!trigger.trim() || !expansion.trim()) {
       error = "Add both a spoken trigger and its expansion.";
       return;
     }
-    if (config.snippets.some((item) => item.trigger.toLowerCase() === trigger.trim().toLowerCase())) {
-      error = "That trigger already exists.";
+    const normalized = normalizeTrigger(trigger);
+    if (!normalized) {
+      error = "That trigger has no words Oto can match.";
+      return;
+    }
+    if (config.snippets.some((item) => normalizeTrigger(item.trigger) === normalized)) {
+      error = "A snippet with an equivalent trigger already exists.";
       return;
     }
     config.snippets = [
@@ -33,56 +56,147 @@
   }
 </script>
 
-<section class="space-y-6">
-  <header>
-    <h2 class="text-xl font-semibold tracking-tight">Snippets</h2>
-    <p class="mt-1 text-sm text-slate-400">
-      Speak an exact trigger to insert a longer block verbatim. “Snippet” before the trigger is optional.
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Snippets</h2>
+    <p class="section__lead">
+      Say a trigger on its own and Oto inserts the block behind it, word for word.
+      Saying “snippet” first is optional.
     </p>
   </header>
 
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl">
-    <div class="grid gap-3 sm:grid-cols-[0.8fr_1.4fr_auto]">
-      <input
-        aria-label="Spoken trigger"
-        class="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-400/50"
-        placeholder="my signature"
-        bind:value={trigger}
-        onkeydown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            addSnippet();
-          }
-        }}
-      />
-      <textarea
-        aria-label="Snippet expansion"
-        class="min-h-11 resize-y rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-400/50"
-        rows="1"
-        placeholder="Best,&#10;Your name"
-        bind:value={expansion}
-      ></textarea>
-      <button type="button" class="rounded-xl bg-sky-500/90 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-400" onclick={addSnippet}>Add</button>
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">New snippet</span>
+      <p class="rack__note">
+        A trigger only fires when it is the whole utterance, so the same phrase inside ordinary
+        dictation stays as it is.
+      </p>
     </div>
-    {#if error}<p class="text-xs text-amber-300">{error}</p>{/if}
 
-    {#if config.snippets.length === 0}
-      <p class="rounded-xl border border-dashed border-white/15 px-4 py-8 text-center text-sm text-slate-500">No voice macros yet.</p>
-    {:else}
-      <div class="space-y-3">
-        {#each config.snippets as snippet (snippet.id)}
-          <article class="grid gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-4 sm:grid-cols-[1fr_1.5fr_auto]">
-            <input aria-label="Spoken trigger" class="rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm" value={snippet.trigger} oninput={(event) => patchSnippet(snippet.id, { trigger: event.currentTarget.value })} />
-            <textarea aria-label="Snippet expansion" class="resize-y rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm" rows="2" value={snippet.expansion} oninput={(event) => patchSnippet(snippet.id, { expansion: event.currentTarget.value })}></textarea>
-            <div class="flex items-start gap-2">
-              <label class="flex items-center gap-1.5 text-xs text-slate-400"><input type="checkbox" checked={snippet.enabled} onchange={(event) => patchSnippet(snippet.id, { enabled: event.currentTarget.checked })} /> On</label>
-              <button type="button" class="rounded-lg px-2 py-1 text-xs text-rose-300 hover:bg-white/10" onclick={() => config.snippets = config.snippets.filter((item) => item.id !== snippet.id)}>Remove</button>
-            </div>
-          </article>
-        {/each}
+    <div class="row row--stacked row--flush">
+      <span class="row__label">Trigger and text</span>
+      <div class="row__control">
+        <div class="compose">
+          <input
+            aria-label="Spoken trigger"
+            placeholder="my signature"
+            bind:value={trigger}
+            onkeydown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                addSnippet();
+              }
+            }}
+          />
+          <textarea
+            aria-label="Text to insert"
+            rows="1"
+            placeholder="Best,&#10;Your name"
+            bind:value={expansion}
+          ></textarea>
+          <button type="button" class="btn" onclick={addSnippet}>Add</button>
+        </div>
+        {#if error}<p class="row__hint status-warn">{error}</p>{/if}
       </div>
-    {/if}
-    <p class="text-xs text-slate-500">Macros only match a complete utterance, preventing a phrase inside normal dictation from expanding unexpectedly.</p>
+    </div>
+  </div>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Saved</span>
+    </div>
+
+    <div class="row row--stacked row--flush">
+      <span class="row__label">
+        {config.snippets.length}
+        {config.snippets.length === 1 ? "snippet" : "snippets"}
+      </span>
+      <div class="row__control">
+        {#if config.snippets.length === 0}
+          <p class="empty">No snippets yet.</p>
+        {:else}
+          <div class="items">
+            {#each config.snippets as snippet (snippet.id)}
+              <article class="item snippet">
+                <input
+                  aria-label="Spoken trigger"
+                  value={snippet.trigger}
+                  oninput={(event) => patchSnippet(snippet.id, { trigger: event.currentTarget.value })}
+                />
+                <textarea
+                  aria-label="Text to insert"
+                  rows="2"
+                  value={snippet.expansion}
+                  oninput={(event) =>
+                    patchSnippet(snippet.id, { expansion: event.currentTarget.value })}
+                ></textarea>
+                <div class="snippet__actions">
+                  <label class="snippet__toggle">
+                    <input
+                      type="checkbox"
+                      checked={snippet.enabled}
+                      onchange={(event) =>
+                        patchSnippet(snippet.id, { enabled: event.currentTarget.checked })}
+                    />
+                    On
+                  </label>
+                  <button
+                    type="button"
+                    class="btn-link btn-link--danger"
+                    onclick={() =>
+                      (config.snippets = config.snippets.filter((item) => item.id !== snippet.id))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
   </div>
 </section>
 
+<style>
+  .compose {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .snippet {
+    gap: var(--space-xs);
+  }
+
+  .snippet__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+  }
+
+  .snippet__toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4375rem;
+    color: var(--muted);
+    font-size: var(--text-xs);
+  }
+
+  @media (min-width: 40rem) {
+    .compose {
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) auto;
+      align-items: start;
+    }
+
+    .snippet {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+      align-items: start;
+    }
+
+    .snippet__actions {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

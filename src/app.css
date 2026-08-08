@@ -1,12 +1,30 @@
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/jetbrains-mono";
+/* Oto — "Signal desk" component layer.
+ *
+ * This file replaces the previous override sheet, which fought Tailwind utilities
+ * baked into every component with `!important` attribute selectors. There are no
+ * utilities and no `!important` here: components use the semantic vocabulary below
+ * and nothing else, so a change lands in exactly one place.
+ *
+ * The wdth stylesheets are imported rather than the default wght-only ones —
+ * faceplate lettering depends on the Archivo width axis being present.
+ */
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/martian-mono/wdth.css";
 @import "../tokens.css";
-@import "tailwindcss";
+
+/* ─── Base ──────────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 :root {
-  font-family: var(--font-body);
-  color: var(--color-ink);
-  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 100%;
+  color: var(--ink);
+  background: var(--chassis);
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -26,7 +44,7 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: clip;
-  background: transparent;
+  background: var(--chassis);
 }
 
 body,
@@ -34,11 +52,61 @@ body,
   min-height: 100dvh;
 }
 
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote {
+  margin: 0;
+}
+
+/* Fieldsets group radio sets semantically; they must not draw a browser frame. */
+fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+legend {
+  padding: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button,
+select,
+label,
+summary,
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--lamp-wash);
+}
+
+/* The overlay window is a floating capsule over the desktop, not a page. */
 html[data-surface="overlay"],
 body[data-surface="overlay"],
 body[data-surface="overlay"] #app {
   overflow: hidden;
-  background: transparent !important;
+  background: transparent;
 }
 
 .overlay-host {
@@ -50,409 +118,627 @@ body[data-surface="overlay"] #app {
   background: transparent;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+/* ─── Faceplate lettering ───────────────────────────────────────────────── */
+
+/* Engraved equipment lettering: expanded, uppercase, wide tracking. Used for the
+   brand, section titles, and every group label — nothing else. */
+.plate {
+  font-family: var(--font-plate);
+  font-stretch: var(--plate-width);
+  font-weight: 640;
+  letter-spacing: var(--plate-track);
+  text-transform: uppercase;
 }
 
-button,
-select,
-label,
-input[type="checkbox"],
-input[type="radio"],
-input[type="range"] {
-  cursor: pointer;
+.plate-micro {
+  font-family: var(--font-plate);
+  font-stretch: var(--plate-width);
+  font-size: var(--text-micro);
+  font-weight: 620;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+/* Anything measured — dB, ms, ×, %, key chords, model IDs, URLs. */
+.readout {
+  font-family: var(--font-data);
+  font-stretch: 87.5%;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
-/* macOS window shell */
-/* First-run wizard: same theme surface as Settings, without the nav grid. */
-.oto-settings-onboarding {
+/* Long strings (base URLs, model IDs) condense so they stay on one line. */
+.readout-tight {
+  font-family: var(--font-data);
+  font-stretch: 75%;
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+}
+
+/* ─── Shell ─────────────────────────────────────────────────────────────── */
+
+.oto-app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 100dvh;
-  color: var(--color-ink);
-  background: var(--color-paper);
-}
-
-.oto-settings {
-  display: grid;
-  grid-template:
-    "titlebar titlebar" 2.5rem
-    "sidebar main" minmax(0, 1fr) /
-    13.75rem minmax(0, 1fr);
-  height: 100dvh;
-  min-height: 0;
   overflow: hidden;
-  color: var(--color-ink);
-  background: var(--color-window-glass);
-  isolation: isolate;
+  color: var(--ink);
+  background: var(--chassis);
 }
 
-.settings-titlebar {
-  position: relative;
-  z-index: var(--z-sticky);
-  grid-area: titlebar;
-  display: grid;
-  place-items: center;
-  border-block-end: var(--rule-thin) solid var(--color-rule);
-  background: rgb(20 25 31 / 0.8);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
-  backdrop-filter: blur(28px) saturate(120%);
-  -webkit-backdrop-filter: blur(28px) saturate(120%);
-  color: var(--color-muted);
-  font-size: 0.8125rem;
-  font-weight: 560;
-  user-select: none;
+.oto-app-plain {
+  min-height: 100dvh;
+  color: var(--ink);
+  background: var(--chassis);
 }
 
-.settings-sidebar {
-  grid-area: sidebar;
+.rail {
+  /* One gutter for every child of the rail, so the wordmark, meter, search box
+     and nav labels all hang off the same vertical line. */
+  --rail-gutter: 0.75rem;
+
+  display: none;
   min-height: 0;
-  overflow-y: auto;
-  padding: 0.65rem 0.65rem 1rem;
-  border-inline-end: var(--rule-thin) solid var(--color-rule);
-  background: var(--color-sidebar-glass);
-  box-shadow: inset -1px 0 0 rgb(0 0 0 / 0.12);
-  backdrop-filter: blur(32px) saturate(120%);
-  -webkit-backdrop-filter: blur(32px) saturate(120%);
-  scrollbar-width: thin;
+  flex-direction: column;
+  border-inline-end: var(--rule) solid var(--etch);
+  background: var(--panel);
 }
 
-.settings-search {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.45rem;
-  height: 2rem;
-  margin: 0 0 1rem;
-  padding: 0 0.55rem;
-  border: var(--rule-thin) solid var(--color-rule);
-  border-radius: 0.5rem;
-  color: var(--color-muted);
-  background: rgb(255 255 255 / 0.045);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
-}
-
-.settings-search:focus-within {
-  border-color: var(--color-focus);
-  box-shadow: 0 0 0 2px var(--color-accent-soft);
-}
-
-.settings-search input {
-  min-width: 0;
-  height: 100%;
-  padding: 0 !important;
-  border: 0 !important;
-  outline: 0 !important;
-  color: var(--color-ink) !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  font-size: 0.8125rem;
-}
-
-.settings-search input::placeholder {
-  color: var(--color-subtle) !important;
-}
-
-.settings-search kbd {
-  color: var(--color-subtle);
-  font-family: var(--font-body);
-  font-size: 0.66rem;
-}
-
-.settings-nav-group {
-  display: grid;
-  gap: 0.12rem;
-  margin-block-end: 0.6rem;
-}
-
-.settings-nav-group__label {
-  margin: 0 0 0.28rem 0.65rem;
-  color: var(--color-muted);
-  font-size: 0.7rem;
-  font-weight: 540;
-  line-height: 1.2;
-}
-
-.settings-nav-button {
+/* Brand faceplate: the product name, and the lamp that says whether Oto is
+   currently hearing anything. */
+.rail__plate {
   display: flex;
-  width: 100%;
-  min-height: 2rem !important;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.35rem 0.65rem;
-  border: var(--rule-thin) solid transparent;
-  border-radius: 0.45rem !important;
-  color: var(--color-muted) !important;
-  background: transparent;
-  font-size: 0.8125rem;
-  font-weight: 480;
-  text-align: start;
+  gap: 0.5rem;
+  padding: 0.875rem var(--rail-gutter) 0.75rem;
 }
 
-.settings-nav-button svg {
-  width: 1rem;
-  height: 1rem;
-  flex: 0 0 1rem;
-  color: var(--color-subtle);
+.rail__mark {
+  display: block;
+  width: 1.375rem;
+  height: 1.375rem;
+  object-fit: contain;
 }
 
-.settings-nav-button[data-active="true"] {
-  border-color: var(--color-rule);
-  color: var(--color-ink) !important;
-  background: rgb(255 255 255 / 0.07);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
+.rail__wordmark {
+  flex: 1;
+  color: var(--ink);
+  font-family: var(--font-plate);
+  font-stretch: 122%;
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.settings-nav-button[data-active="true"] svg {
-  color: var(--color-accent);
+.rail__nav {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-sm) var(--rail-gutter) var(--space-lg);
 }
 
-.settings-search-empty {
-  margin: 1.5rem 0.65rem;
-  color: var(--color-subtle);
+.rail__foot {
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border-block-start: var(--rule) solid var(--etch);
+}
+
+/* ─── Gauge: the live input meter ───────────────────────────────────────── */
+
+/* The signature element. It is wired to the real microphone level, so the window
+   is never a dead form — it reacts while you speak and reads −∞ when silent. */
+.gauge {
+  display: grid;
+  gap: 0.4375rem;
+  margin: 0 var(--rail-gutter) var(--space-sm);
+  padding: 0.5rem 0.625rem 0.5625rem;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-panel);
+  background: var(--well);
+}
+
+.gauge__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.gauge__label {
+  color: var(--faint);
+}
+
+.gauge__value {
+  color: var(--ink-2);
   font-size: var(--text-xs);
 }
 
-.settings-compact-nav {
+.gauge__value[data-live="true"] {
+  color: var(--lamp-text);
+}
+
+.gauge__state {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--faint);
+}
+
+.lamp {
+  display: block;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  flex: 0 0 auto;
+  border-radius: var(--radius-round);
+  background: var(--etch-strong);
+  transition: background-color var(--dur-tick) var(--ease-lamp);
+}
+
+.lamp[data-lit="live"] {
+  background: var(--lamp);
+  box-shadow: 0 0 0 2px var(--lamp-wash);
+}
+
+.lamp[data-lit="ok"] {
+  background: var(--signal-safe);
+}
+
+.lamp[data-lit="fault"] {
+  background: var(--signal-clip);
+  box-shadow: 0 0 0 2px var(--signal-clip-wash);
+}
+
+/* Segmented LED ladder. Segments are discrete DOM nodes rather than a canvas so
+   they inherit the theme and stay crisp at any scale factor. */
+.meter {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 0.5rem;
+  overflow: hidden;
+}
+
+.meter__seg {
+  min-width: 0;
+  flex: 1 1 0;
+  border-radius: 1px;
+  background: var(--etch);
+  transition:
+    background-color 60ms linear,
+    opacity 60ms linear;
+}
+
+.meter__seg[data-lit="safe"] {
+  background: var(--signal-safe);
+}
+
+.meter__seg[data-lit="hot"] {
+  background: var(--lamp);
+}
+
+.meter__seg[data-lit="clip"] {
+  background: var(--signal-clip);
+}
+
+/* Peak-hold: the highest segment reached recently, held then released. Real
+   meters do this, and it makes a short loud syllable visible after it passes. */
+.meter__seg[data-peak="true"] {
+  background: var(--ink);
+}
+
+/* Narrow contexts (the overlay) need thicker segments than gaps to stay legible. */
+.meter--compact {
+  height: 0.875rem;
+  gap: 1px;
+}
+
+.meter--tall {
+  height: 1.75rem;
+}
+
+/* ─── Rail navigation ───────────────────────────────────────────────────── */
+
+.rail-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  min-height: 2rem;
+  margin: 0 var(--rail-gutter) var(--space-xs);
+  padding-inline: 0.5rem;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-control);
+  color: var(--faint);
+  background: var(--well);
+}
+
+.rail-search:focus-within {
+  border-color: var(--etch-strong);
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.rail-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  font-size: var(--text-sm);
+}
+
+.rail-search input::placeholder {
+  color: var(--faint);
+}
+
+.rail-search input::-webkit-search-cancel-button {
   display: none;
 }
 
-.settings-main {
-  grid-area: main;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: var(--color-paper);
-  scrollbar-color: var(--color-rule-strong) transparent;
-  scrollbar-width: thin;
+.rail-search kbd {
+  color: var(--faint);
+  font-family: var(--font-data);
+  font-stretch: 75%;
+  font-size: 0.625rem;
+  white-space: nowrap;
 }
 
-.settings-stage {
-  width: min(100%, 57rem);
-  margin-inline: auto;
-  padding: 1.4rem 2.7rem 6.5rem;
-}
-
-.settings-stage > section,
-.settings-section {
+.nav-group {
   display: grid;
-  gap: 1.75rem;
-  min-width: 0;
-  animation: settings-enter var(--dur-long) var(--ease-out) both;
+  gap: 1px;
+  margin-block-end: var(--space-md);
 }
 
-.settings-stage > section > header,
-.settings-section > header {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-/* History header: title + clear action on one row (overrides section header grid). */
-.settings-stage > section > header.history-header {
+/* The group label is ruled off to the right, the way a panel section is silk
+   screened onto a faceplate. */
+.nav-group__label {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0 0.375rem 0.375rem;
+  color: var(--faint);
 }
 
-.history-clear-btn {
-  flex-shrink: 0;
-  color: var(--color-error) !important;
-  border-color: rgb(239 123 118 / 0.38) !important;
-  background: rgb(239 123 118 / 0.08) !important;
+.nav-group__label::after {
+  height: var(--rule);
+  flex: 1;
+  background: var(--etch);
+  content: "";
 }
 
-.history-clear-btn:hover:not(:disabled) {
-  background: rgb(239 123 118 / 0.16) !important;
-}
-
-.settings-stage > section > header h2,
-.settings-section > header h2 {
-  margin: 0;
-  color: var(--color-ink);
-  font-family: var(--font-display);
-  font-size: 1.55rem !important;
-  font-style: normal;
-  font-weight: 650 !important;
-  line-height: 1.1;
-  letter-spacing: -0.026em !important;
-}
-
-.settings-stage > section > header p,
-.settings-section > header p {
-  max-width: 62ch;
-  margin: 0 !important;
-  color: var(--color-muted) !important;
-  font-size: 0.8125rem !important;
-  line-height: 1.45;
-}
-
-.settings-panel,
-.settings-stage > section > .rounded-2xl {
-  border: var(--rule-thin) solid var(--color-rule) !important;
-  border-radius: var(--radius-panel) !important;
-  padding: 1.15rem !important;
-  background: rgb(255 255 255 / 0.012) !important;
-  color: var(--color-ink) !important;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.018) !important;
-  backdrop-filter: none !important;
-}
-
-.settings-stage h3,
-.settings-stage legend {
-  color: var(--color-ink) !important;
-  font-family: var(--font-display);
-  font-style: normal;
-}
-
-.settings-stage p,
-.settings-stage li,
-.settings-stage span {
-  line-height: 1.45;
-}
-
-/* Provider view — the primary reference screen */
-.provider-panel {
-  overflow: hidden;
-  padding: 0 !important;
-  border-inline: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.provider-row {
-  display: grid;
-  grid-template-columns: 8.8rem minmax(0, 1fr);
-  align-items: start;
-  gap: 1.2rem;
-  min-height: 4rem;
-  padding: 0.8rem 0;
-  border-block-end: var(--rule-thin) solid var(--color-rule);
-}
-
-.provider-row:last-child {
-  border-block-end: 0;
-}
-
-.provider-row__label {
-  padding-block-start: 0.48rem;
-  color: var(--color-ink-2) !important;
-  font-size: 0.8125rem;
-  font-weight: 520;
-}
-
-.provider-row__control {
-  display: grid;
-  min-width: 0;
-  gap: 0.4rem;
-}
-
-.provider-row__control > input,
-.provider-select {
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5625rem;
   width: 100%;
+  min-height: 2.125rem;
+  padding: 0 0.375rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  background: transparent;
+  font-size: var(--text-sm);
+  font-weight: 480;
+  text-align: start;
+  transition:
+    color var(--dur-tick) var(--ease-mech),
+    background-color var(--dur-tick) var(--ease-mech);
 }
 
-.provider-row__control small {
-  color: var(--color-muted);
-  font-size: 0.7rem;
-  line-height: 1.35;
+.nav-item svg {
+  flex: 0 0 auto;
+  color: var(--faint);
+  transition: color var(--dur-tick) var(--ease-mech);
 }
 
-.provider-key-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.55rem;
+.nav-item__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.provider-key-control button {
-  min-width: 5.6rem;
+.nav-item[data-active="true"] {
+  color: var(--ink);
+  background: var(--raised);
+  font-weight: 560;
 }
 
-.provider-custom,
-.provider-profile-note {
-  margin: 0;
-  padding: 1rem 1.1rem;
-  border-block-end: var(--rule-thin) solid var(--color-rule);
-  background: rgb(255 255 255 / 0.015);
+.nav-item[data-active="true"] svg {
+  color: var(--lamp-text);
 }
 
-.provider-profile-note {
-  color: var(--color-muted);
+/* Amber tick in the gutter — the lit indicator for the selected channel. */
+.nav-item[data-active="true"]::before {
+  position: absolute;
+  inset-block: 0.4375rem;
+  inset-inline-start: -0.25rem;
+  width: 2px;
+  border-radius: var(--radius-round);
+  background: var(--lamp);
+  content: "";
+}
+
+.rail-empty {
+  margin: var(--space-sm) var(--space-md);
+  color: var(--faint);
   font-size: var(--text-xs);
 }
 
-.provider-key-status {
-  color: var(--color-ink-2) !important;
+/* ─── Compact header (narrow layout) ────────────────────────────────────── */
+
+.topbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-sticky);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(8rem, 0.6fr);
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 3.5rem;
+  padding-inline: var(--space-md);
+  border-block-end: var(--rule) solid var(--etch);
+  background: var(--panel);
 }
 
-/* Native-style controls */
-.oto-settings input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-.oto-settings select,
-.oto-settings textarea {
-  min-height: 2.15rem;
-  border: var(--rule-thin) solid var(--color-rule-strong) !important;
-  border-radius: var(--radius-control) !important;
+.topbar__copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.topbar__brand {
+  color: var(--ink);
+  font-family: var(--font-plate);
+  font-stretch: 122%;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.topbar__section {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Stage ─────────────────────────────────────────────────────────────── */
+
+.stage {
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--chassis);
+}
+
+.stage__inner {
+  width: 100%;
+  max-width: 64rem;
+  padding: var(--space-lg) var(--space-md) 6.5rem;
+}
+
+.section {
+  display: grid;
+  gap: var(--space-lg);
+  min-width: 0;
+  animation: section-in var(--dur-sweep) var(--ease-mech) both;
+}
+
+.section__head {
+  display: grid;
+  gap: 0.4375rem;
+  min-width: 0;
+}
+
+.section__title {
+  color: var(--ink);
+  font-family: var(--font-plate);
+  font-stretch: var(--plate-width);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.section__lead {
+  max-width: 64ch;
+  color: var(--muted);
+  font-size: var(--text-base);
+  line-height: 1.55;
+}
+
+@keyframes section-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+}
+
+/* ─── Rack: a titled group of rows ──────────────────────────────────────── */
+
+.rack {
+  display: grid;
+  min-width: 0;
+}
+
+.rack__head {
+  display: grid;
+  gap: 0.25rem;
+  padding-block-end: 0.5rem;
+  border-block-end: var(--rule) solid var(--etch-strong);
+}
+
+.rack__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  color: var(--ink-2);
+}
+
+.rack__note {
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* ─── Row: label column + control column, hairline ruled ────────────────── */
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0.375rem var(--space-lg);
+  min-width: 0;
+  padding-block: 0.875rem;
+  border-block-end: var(--rule) solid var(--etch);
+}
+
+.row__label {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 560;
+}
+
+.row__control {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.row__hint {
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* Switch rows read left-to-right as statement then state, so the copy keeps the
+   full width and the control sits hard right. */
+.row--switch {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.row__copy {
+  display: grid;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.row__copy strong {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 560;
+}
+
+.row__copy span {
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.row--flush {
+  border-block-end: 0;
+}
+
+/* ─── Form controls ─────────────────────────────────────────────────────── */
+
+/* Inputs are milled into the panel: recessed well, dark top edge. */
+.oto-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.oto-app select,
+.oto-app textarea,
+.oto-app-plain input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.oto-app-plain select,
+.oto-app-plain textarea {
+  width: 100%;
+  min-height: 2.25rem;
+  border: var(--rule) solid var(--etch-strong);
+  border-radius: var(--radius-control);
   outline: 2px solid transparent;
   outline-offset: 1px;
-  padding: 0.38rem 0.7rem !important;
-  color: var(--color-ink) !important;
-  background: rgb(5 8 11 / 0.23) !important;
-  box-shadow:
-    inset 0 1px 1px rgb(0 0 0 / 0.15),
-    0 1px 0 rgb(255 255 255 / 0.018) !important;
-  font-size: 0.8125rem;
+  padding: 0.3125rem 0.5rem;
+  color: var(--ink);
+  background: var(--well);
+  box-shadow: inset 0 1px 2px oklch(0% 0 0 / 0.28);
+  font-size: var(--text-sm);
   transition:
-    background-color var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out),
-    opacity var(--dur-short) var(--ease-out);
+    border-color var(--dur-tick) var(--ease-mech),
+    background-color var(--dur-tick) var(--ease-mech);
 }
 
-.oto-settings textarea {
+.oto-app textarea,
+.oto-app-plain textarea {
   min-height: 5rem;
+  padding: 0.4375rem 0.5rem;
+  line-height: 1.5;
   resize: vertical;
 }
 
-.oto-settings input::placeholder,
-.oto-settings textarea::placeholder {
-  color: var(--color-subtle) !important;
+.oto-app input::placeholder,
+.oto-app textarea::placeholder,
+.oto-app-plain input::placeholder,
+.oto-app-plain textarea::placeholder {
+  color: var(--faint);
   opacity: 1;
 }
 
-.oto-settings input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
-.oto-settings select:focus-visible,
-.oto-settings textarea:focus-visible {
-  border-color: var(--color-accent) !important;
-  outline-color: var(--color-focus);
+.oto-app input:focus-visible,
+.oto-app select:focus-visible,
+.oto-app textarea:focus-visible,
+.oto-app-plain input:focus-visible,
+.oto-app-plain select:focus-visible,
+.oto-app-plain textarea:focus-visible {
+  border-color: var(--lamp);
+  outline-color: var(--focus);
 }
 
-.oto-settings input:disabled,
-.oto-settings select:disabled,
-.oto-settings textarea:disabled,
-.oto-settings button:disabled {
+.oto-app input:disabled,
+.oto-app select:disabled,
+.oto-app textarea:disabled,
+.oto-app button:disabled,
+.oto-app-plain input:disabled,
+.oto-app-plain select:disabled,
+.oto-app-plain textarea:disabled,
+.oto-app-plain button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
-.oto-settings select {
-  appearance: none !important;
-  -webkit-appearance: none !important;
+.oto-app select,
+.oto-app-plain select {
+  appearance: none;
   color-scheme: inherit;
-  padding-inline-end: 2rem !important;
+  padding-inline-end: 1.75rem;
 }
 
-.oto-settings select option,
-.oto-settings select optgroup {
-  color: var(--color-ink);
-  background: var(--color-paper-2);
+.oto-app select option,
+.oto-app select optgroup,
+.oto-app-plain select option,
+.oto-app-plain select optgroup {
+  color: var(--ink);
+  background: var(--chassis);
+}
+
+/* Field carrying measured content — URLs, model IDs, key chords. */
+.field-data {
+  font-family: var(--font-data);
+  font-stretch: 75%;
+  font-size: 0.78rem;
+  letter-spacing: -0.015em;
 }
 
 .select-wrap {
@@ -460,490 +746,1045 @@ input[type="range"] {
   min-width: 0;
 }
 
-.select-wrap > select {
-  width: 100%;
-}
-
+/* Anchored to the select's own centre line rather than the wrapper's, so a hint
+   sitting below the control cannot drag the chevron down with it. */
 .select-wrap > svg {
   position: absolute;
-  inset-inline-end: 0.65rem;
-  inset-block-start: 50%;
-  color: var(--color-muted);
+  inset-inline-end: 0.5rem;
+  inset-block-start: 1.125rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--muted);
   pointer-events: none;
   transform: translateY(-50%);
 }
 
-.oto-settings button {
-  min-height: 2.15rem;
-  padding-inline: 0.85rem;
-  border: var(--rule-thin) solid var(--color-rule-strong);
-  border-radius: var(--radius-control) !important;
-  color: var(--color-ink);
-  background: rgb(255 255 255 / 0.055);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-  transition:
-    transform var(--dur-micro) var(--ease-out),
-    background-color var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out),
-    color var(--dur-short) var(--ease-out),
-    opacity var(--dur-short) var(--ease-out);
-}
+/* ─── Switch: a lit rocker, not a pill ──────────────────────────────────── */
 
-.oto-settings button:active {
-  transform: scale(0.98);
-}
-
-.oto-settings button[class*="bg-sky-"],
-.oto-settings button[class*="bg-violet-"],
-.settings-actionbar__button {
-  border-color: rgb(74 204 219 / 0.48) !important;
-  color: var(--color-accent-ink) !important;
-  background: rgb(25 119 132 / 0.72) !important;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.12),
-    0 1px 2px rgb(0 0 0 / 0.18) !important;
-}
-
-.oto-settings input[type="checkbox"] {
+.oto-app input[type="checkbox"],
+.oto-app-plain input[type="checkbox"] {
   position: relative;
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 1.25rem;
   flex: 0 0 auto;
-  width: 2.35rem;
-  height: 1.3rem;
   appearance: none;
-  -webkit-appearance: none;
-  border: var(--rule-thin) solid var(--color-rule-strong);
-  border-radius: var(--radius-round);
-  background: var(--color-paper-raised);
+  border: var(--rule) solid var(--etch-strong);
+  border-radius: var(--radius-control);
+  padding: 0;
+  background: var(--well);
+  box-shadow: inset 0 1px 2px oklch(0% 0 0 / 0.3);
+  transition:
+    background-color var(--dur-throw) var(--ease-lamp),
+    border-color var(--dur-throw) var(--ease-lamp);
 }
 
-.oto-settings input[type="checkbox"]::after {
-  content: "";
+.oto-app input[type="checkbox"]::after,
+.oto-app-plain input[type="checkbox"]::after {
   position: absolute;
-  inset-block-start: 0.17rem;
-  inset-inline-start: 0.18rem;
-  width: 0.83rem;
-  height: 0.83rem;
-  border-radius: var(--radius-round);
-  background: var(--color-muted);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
-  transition: transform var(--dur-short) var(--ease-in-out);
+  inset-block-start: 0.1875rem;
+  inset-inline-start: 0.1875rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  background: var(--faint);
+  content: "";
+  transform: translateX(0);
+  transition:
+    transform var(--dur-throw) var(--ease-mech),
+    background-color var(--dur-throw) var(--ease-lamp);
 }
 
-.oto-settings input[type="checkbox"]:checked {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
+.oto-app input[type="checkbox"]:checked,
+.oto-app-plain input[type="checkbox"]:checked {
+  border-color: var(--lamp);
+  background: var(--lamp);
 }
 
-.oto-settings input[type="checkbox"]:checked::after {
-  background: #ffffff;
-  transform: translateX(1.02rem);
+.oto-app input[type="checkbox"]:checked::after,
+.oto-app-plain input[type="checkbox"]:checked::after {
+  background: var(--lamp-ink);
+  transform: translateX(0.9375rem);
 }
 
-.oto-settings input[type="radio"] {
-  width: 0.95rem;
-  height: 0.95rem;
+.oto-app input[type="radio"],
+.oto-app-plain input[type="radio"] {
+  width: 0.875rem;
+  height: 0.875rem;
   flex: 0 0 auto;
-  accent-color: var(--color-accent);
+  accent-color: var(--lamp);
 }
 
-.oto-settings input[type="range"] {
-  min-height: 2.15rem;
-  accent-color: var(--color-accent);
-}
+/* ─── Slider: a travel control with a live readout ──────────────────────── */
 
-/* Re-map the legacy utility palette into the native system */
-.oto-settings .text-white,
-.oto-settings .text-slate-100,
-.oto-settings .text-slate-200,
-.oto-settings .text-slate-300,
-.oto-settings .text-violet-100,
-.oto-settings .text-amber-100,
-.oto-settings .text-amber-200 {
-  color: var(--color-ink-2) !important;
-}
-
-.oto-settings .text-slate-400,
-.oto-settings .text-slate-500,
-.oto-settings .text-slate-600 {
-  color: var(--color-muted) !important;
-}
-
-.oto-settings .text-amber-300,
-.oto-settings .text-amber-400,
-.oto-settings .text-amber-500 {
-  color: var(--color-warm) !important;
-}
-
-.oto-settings .text-rose-300,
-.oto-settings .text-rose-400 {
-  color: var(--color-error) !important;
-}
-
-.oto-settings .text-emerald-100,
-.oto-settings .text-emerald-200,
-.oto-settings .text-emerald-300,
-.oto-settings .text-emerald-400 {
-  color: var(--color-success) !important;
-}
-
-.oto-settings code,
-.oto-settings .font-mono {
-  font-family: var(--font-mono) !important;
-  font-size: 0.9em;
-  color: var(--color-ink-2);
-  background: rgb(255 255 255 / 0.04) !important;
-}
-
-.oto-settings [class*="border-white"],
-.oto-settings [class*="border-slate"] {
-  border-color: var(--color-rule) !important;
-}
-
-.oto-settings [class*="border-amber"] {
-  border-color: rgb(240 173 57 / 0.35) !important;
-}
-
-.oto-settings [class*="border-rose"] {
-  border-color: rgb(239 123 118 / 0.38) !important;
-}
-
-.oto-settings [class*="bg-slate-"],
-.oto-settings [class*="bg-black"] {
-  background-color: rgb(0 0 0 / 0.12) !important;
-}
-
-.oto-settings [class*="bg-amber-"] {
-  background-color: rgb(240 173 57 / 0.06) !important;
-}
-
-.oto-settings [class*="bg-emerald-"] {
-  background-color: rgb(102 201 147 / 0.06) !important;
-}
-
-/* Sticky save footer */
-.settings-actionbar {
-  position: fixed;
-  z-index: var(--z-sticky);
-  inset-block-end: 0;
-  inset-inline: 13.75rem 0;
-  display: flex;
-  min-height: 5.25rem;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1rem;
-  padding-inline: 2rem;
-  border: 0;
+.oto-app input[type="range"],
+.oto-app-plain input[type="range"] {
+  width: 100%;
+  height: 1.25rem;
+  appearance: none;
   background: transparent;
-  box-shadow: none;
-  pointer-events: none;
 }
 
-.settings-actionbar__note {
-  display: none;
-  color: var(--color-muted);
-  font-size: 0.72rem;
+.oto-app input[type="range"]::-webkit-slider-runnable-track,
+.oto-app-plain input[type="range"]::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 1px;
+  background: var(--etch);
+  box-shadow: inset 0 1px 1px oklch(0% 0 0 / 0.35);
 }
 
-.settings-actionbar__button {
+.oto-app input[type="range"]::-moz-range-track,
+.oto-app-plain input[type="range"]::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 1px;
+  background: var(--etch);
+}
+
+.oto-app input[type="range"]::-webkit-slider-thumb,
+.oto-app-plain input[type="range"]::-webkit-slider-thumb {
+  width: 0.5rem;
+  height: 1rem;
+  appearance: none;
+  margin-block-start: -0.375rem;
+  border: var(--rule) solid var(--lamp-deep);
+  border-radius: 2px;
+  background: var(--lamp);
+}
+
+.oto-app input[type="range"]::-moz-range-thumb,
+.oto-app-plain input[type="range"]::-moz-range-thumb {
+  width: 0.5rem;
+  height: 1rem;
+  border: var(--rule) solid var(--lamp-deep);
+  border-radius: 2px;
+  background: var(--lamp);
+}
+
+.slider-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.slider-value {
+  color: var(--lamp-text);
+  font-family: var(--font-data);
+  font-stretch: 87.5%;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Buttons: raised, with a top highlight ─────────────────────────────── */
+
+.btn {
   display: inline-flex;
-  min-width: 7.75rem;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  font-weight: 550;
-  pointer-events: auto;
+  gap: 0.4375rem;
+  min-height: 2.25rem;
+  padding-inline: 0.75rem;
+  border: var(--rule) solid var(--etch-strong);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.06);
+  font-size: var(--text-sm);
+  font-weight: 540;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-tick) var(--ease-mech),
+    border-color var(--dur-tick) var(--ease-mech),
+    color var(--dur-tick) var(--ease-mech);
 }
 
-/* Shared settings patterns */
-.models-grid {
-  display: grid;
-  gap: 1rem;
-  min-width: 0;
+.btn:not(:disabled):active {
+  background: var(--well);
+  box-shadow: inset 0 1px 3px oklch(0% 0 0 / 0.35);
 }
 
-.model-column {
-  display: grid;
-  align-content: start;
-  gap: 1rem;
+.btn--primary {
+  border-color: var(--lamp-deep);
+  color: var(--lamp-ink);
+  background: var(--lamp);
+  font-weight: 620;
 }
 
-.model-column__head {
-  display: grid;
-  gap: 0.25rem;
-  padding-block-end: 0.75rem;
-  border-block-end: var(--rule-thin) solid var(--color-rule);
+.btn--primary:not(:disabled):active {
+  background: var(--lamp-press);
+  box-shadow: inset 0 1px 3px oklch(0% 0 0 / 0.25);
 }
 
-.model-column__head h3 {
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 600;
+.btn--quiet {
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
 }
 
-.model-column__head p,
-.setting-field__hint,
-.setting-row__copy span {
-  margin: 0;
-  color: var(--color-muted) !important;
+.btn--danger {
+  color: var(--signal-clip);
+}
+
+.btn--small {
+  min-height: 1.75rem;
+  padding-inline: 0.5rem;
   font-size: var(--text-xs);
 }
 
-.setting-field {
-  display: grid;
-  gap: 0.45rem;
-  min-width: 0;
+.btn--wide {
+  width: 100%;
 }
 
-.setting-field__label,
-.setting-row__copy strong {
-  color: var(--color-ink-2) !important;
-  font-size: 0.8125rem;
-  font-weight: 550;
-}
-
-.setting-row {
-  display: flex;
-  min-height: 3.35rem;
+/* A button that is only a label — used for inline destructive links. */
+.btn-link {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-block: 0.65rem;
-  border-block-end: var(--rule-thin) solid var(--color-rule);
+  gap: 0.25rem;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: var(--text-xs);
+  text-align: start;
+  text-decoration: none;
+  transition: color var(--dur-tick) var(--ease-mech);
 }
 
-.setting-row__copy {
-  display: grid;
-  gap: 0.2rem;
+.btn-link--danger {
+  color: var(--signal-clip);
+}
+
+.btn-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
   min-width: 0;
+  flex-wrap: wrap;
 }
 
-.engine-switch {
+/* ─── Segmented control: a two-position selector switch ─────────────────── */
+
+.seg {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.18rem;
-  padding: 0.18rem;
-  border: var(--rule-thin) solid var(--color-rule-strong);
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 2px;
+  border: var(--rule) solid var(--etch-strong);
   border-radius: var(--radius-control);
-  background: rgb(0 0 0 / 0.1);
+  background: var(--seg-track);
+  box-shadow: inset 0 1px 2px oklch(0% 0 0 / 0.28);
 }
 
-.engine-switch label {
+.seg__option {
   position: relative;
   display: flex;
-  min-height: 2.1rem;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  padding-inline: 0.7rem;
-  border-radius: 0.38rem;
-  color: var(--color-muted);
-  font-size: 0.78rem;
+  gap: 0.375rem;
+  min-height: 1.875rem;
+  padding-inline: 0.5rem;
+  border-radius: 2px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 520;
+  white-space: nowrap;
+  transition:
+    color var(--dur-tick) var(--ease-mech),
+    background-color var(--dur-tick) var(--ease-mech);
 }
 
-.engine-switch label[data-active="true"] {
-  color: var(--color-ink);
-  background: var(--color-paper-raised);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+.seg__option[data-active="true"] {
+  color: var(--ink);
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.06);
 }
 
-.engine-switch input {
+.seg__option input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-.pipeline-map {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.6rem;
-  padding-block: 1rem;
-  border-block-end: var(--rule-thin) solid var(--color-rule);
+.seg__option:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
 }
 
-.pipeline-stage {
-  position: relative;
+/* ─── Choice list: radio options with a lit edge ────────────────────────── */
+
+.choice-list {
   display: grid;
+  gap: 2px;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-control);
+  background: var(--panel);
+  transition:
+    border-color var(--dur-tick) var(--ease-mech),
+    background-color var(--dur-tick) var(--ease-mech);
+}
+
+.choice[data-active="true"] {
+  border-color: var(--lamp);
+  background: var(--lamp-wash);
+}
+
+.choice__copy {
+  display: grid;
+  gap: 0.125rem;
   min-width: 0;
-  justify-items: center;
-  gap: 0.45rem;
-  color: var(--color-muted);
+}
+
+.choice__copy strong {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 560;
+}
+
+.choice__copy span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* ─── Fields: compact labelled controls, for use inside items ───────────── */
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: 0.3125rem;
+  min-width: 0;
+}
+
+.field__label {
+  color: var(--faint);
+}
+
+.field__hint {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.field-grid {
+  display: grid;
+  gap: 0.6875rem;
+  min-width: 0;
+}
+
+.field--span {
+  grid-column: 1 / -1;
+}
+
+/* A nested group inside an item — the sub-assembly on a panel. */
+.subrack {
+  display: grid;
+  gap: 0.6875rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-control);
+  background: var(--well);
+}
+
+.subrack__title {
+  color: var(--faint);
+}
+
+/* Square icon-only control, sized to sit level with a row of text. */
+.icon-btn {
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: var(--rule) solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  background: transparent;
+  transition:
+    color var(--dur-tick) var(--ease-mech),
+    background-color var(--dur-tick) var(--ease-mech);
+}
+
+.icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+.icon-btn--danger:not(:disabled):hover {
+  color: var(--signal-clip);
+}
+
+/* Verbatim machine output — never restyled into prose. */
+.output {
+  overflow-x: auto;
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  background: var(--well);
+  font-family: var(--font-data);
+  font-stretch: 75%;
+  font-size: var(--text-micro);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ─── Key caps ──────────────────────────────────────────────────────────── */
+
+/* A chord is a physical thing, so it is drawn as keys rather than typed out. */
+.keys {
+  display: flex;
+  align-items: center;
+  gap: 0.3125rem;
+  flex-wrap: wrap;
+}
+
+.key {
+  display: inline-flex;
+  min-width: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1875rem 0.4375rem;
+  border: var(--rule) solid var(--etch-strong);
+  border-block-end-width: 2px;
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  background: var(--raised);
+  font-family: var(--font-data);
+  font-stretch: 75%;
+  font-size: var(--text-micro);
+  font-weight: 500;
+}
+
+.keys__join {
+  color: var(--faint);
+  font-size: var(--text-micro);
+}
+
+/* ─── Disclosure ────────────────────────────────────────────────────────── */
+
+.disclosure {
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+}
+
+.disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.625rem 0.75rem;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 540;
+  list-style: none;
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > summary::after {
+  margin-inline-start: auto;
+  color: var(--faint);
+  content: "+";
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+}
+
+.disclosure[open] > summary::after {
+  content: "−";
+}
+
+.disclosure__body {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.75rem;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.disclosure__body ul {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding-inline-start: 1rem;
+}
+
+.disclosure__body strong {
+  color: var(--ink-2);
+  font-weight: 560;
+}
+
+/* ─── Notes: inline status, never a floating card ───────────────────────── */
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6875rem;
+  border-inline-start: 2px solid var(--etch-strong);
+  color: var(--muted);
+  background: var(--panel);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.note svg {
+  flex: 0 0 auto;
+  margin-block-start: 0.0625rem;
+}
+
+.note strong {
+  color: var(--ink-2);
+  font-weight: 560;
+}
+
+.note--warn {
+  border-inline-start-color: var(--lamp);
+}
+
+.note--bad {
+  border-inline-start-color: var(--signal-clip);
+  color: var(--ink-2);
+}
+
+.note--ok {
+  border-inline-start-color: var(--signal-safe);
+}
+
+.status-ok {
+  color: var(--signal-safe);
+}
+
+.status-warn {
+  color: var(--lamp-text);
+}
+
+.status-bad {
+  color: var(--signal-clip);
+}
+
+.empty {
+  padding: 1.75rem var(--space-md);
+  border: var(--rule) dashed var(--etch-strong);
+  border-radius: var(--radius-panel);
+  color: var(--muted);
+  font-size: var(--text-sm);
   text-align: center;
 }
 
-.pipeline-stage__icon {
+.loading {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* ─── Data display ──────────────────────────────────────────────────────── */
+
+.tiles {
   display: grid;
-  width: 2.9rem;
-  height: 2.9rem;
-  place-items: center;
-  border: var(--rule-thin) solid var(--color-rule-strong);
-  border-radius: 50%;
-  background: rgb(0 0 0 / 0.08);
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--rule);
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  background: var(--etch);
 }
 
-.pipeline-stage__icon img {
-  width: 2.15rem;
-  height: 2.15rem;
-  object-fit: contain;
+.tile {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 0.875rem 0.9375rem 1rem;
+  background: var(--panel);
 }
 
-.pipeline-stage strong {
-  color: var(--color-ink-2);
+.tile__label {
+  color: var(--faint);
+}
+
+.tile__value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  color: var(--ink);
+  font-family: var(--font-data);
+  font-stretch: 87.5%;
+  font-size: 1.375rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.tile__unit {
+  color: var(--muted);
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
-.pipeline-stage span {
-  color: var(--color-muted) !important;
-  font-size: 0.68rem;
+.tile__note {
+  margin-block-start: 0.25rem;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
 }
 
-.pipeline-stage--active .pipeline-stage__icon,
-.pipeline-stage--active strong {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+/* Daily activity, in the ladder language of the meter. The bars stay neutral —
+   thirty lit days would spend the accent on nothing — and only today is lamp-lit,
+   because today is the one column still moving. */
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 6rem;
 }
 
-.pipeline-stage__arrow {
-  position: absolute;
-  inset-block-start: 1.1rem;
-  inset-inline-end: -0.75rem;
-  color: var(--color-rule-strong);
+.bars__bar {
+  min-width: 0;
+  flex: 1 1 0;
+  border-radius: 1px 1px 0 0;
+  background: var(--etch-strong);
 }
 
-@keyframes settings-enter {
-  from {
-    opacity: 0;
-    transform: translateY(0.2rem);
-  }
+.bars__bar[data-empty="true"] {
+  background: var(--etch);
 }
+
+.bars__bar[data-today="true"] {
+  background: var(--lamp);
+}
+
+.bars__scale {
+  display: flex;
+  justify-content: space-between;
+  margin-block-start: 0.5rem;
+  color: var(--faint);
+}
+
+/* ─── Item lists (modes, snippets, dictionary, history) ─────────────────── */
+
+.items {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.item {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+}
+
+.item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.item__title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item__meta {
+  color: var(--faint);
+  font-family: var(--font-data);
+  font-stretch: 75%;
+  font-size: var(--text-micro);
+  white-space: nowrap;
+}
+
+.item__body {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.item__grid {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* ─── Pair rows (permissions, about, pipeline readouts) ─────────────────── */
+
+.pairs {
+  display: grid;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.75rem 0.875rem;
+  background: var(--panel);
+}
+
+.pair + .pair {
+  border-block-start: var(--rule) solid var(--etch);
+}
+
+.pair__icon {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-control);
+  color: var(--lamp-text);
+  background: var(--well);
+}
+
+.pair__copy {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.pair__copy strong {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 560;
+}
+
+.pair__copy span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.pair__side {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* ─── Signal chain: how a dictation actually flows ──────────────────────── */
+
+.chain {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--rule) solid var(--etch);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+}
+
+.chain__stage {
+  display: grid;
+  gap: 0.1875rem;
+  min-width: 0;
+  flex: 1 1 0;
+  padding: 0.625rem 0.75rem;
+  color: var(--muted);
+}
+
+.chain__stage + .chain__stage {
+  border-inline-start: var(--rule) solid var(--etch);
+}
+
+.chain__stage[data-active="true"] {
+  background: var(--well);
+}
+
+.chain__index {
+  color: var(--faint);
+}
+
+.chain__stage[data-active="true"] .chain__index {
+  color: var(--lamp-text);
+}
+
+.chain__name {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 560;
+}
+
+.chain__value {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-stretch: 75%;
+  font-size: var(--text-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Action bar ────────────────────────────────────────────────────────── */
+
+.actionbar {
+  position: fixed;
+  z-index: var(--z-sticky);
+  inset-block-end: 0;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  min-height: 4.5rem;
+  padding: var(--space-md);
+  background: linear-gradient(
+    to top,
+    var(--chassis) 46%,
+    color-mix(in oklch, var(--chassis) 72%, transparent) 78%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.actionbar > * {
+  pointer-events: auto;
+}
+
+.actionbar__note {
+  display: none;
+  margin-inline-end: auto;
+  color: var(--lamp-text);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+
+.actionbar__status {
+  max-width: 32rem;
+  color: var(--signal-clip);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.actionbar__save {
+  min-width: 8.5rem;
+}
+
+/* Unsaved work lights the save control; a clean form leaves it unlit. */
+.actionbar__save[data-dirty="false"] {
+  border-color: var(--etch-strong);
+  color: var(--ink-2);
+  background: var(--raised);
+  font-weight: 540;
+}
+
+/* ─── Hover (pointer devices only) ──────────────────────────────────────── */
 
 @media (hover: hover) and (pointer: fine) {
-  .settings-nav-button:hover {
-    color: var(--color-ink) !important;
-    background: rgb(255 255 255 / 0.045);
+  .nav-item:hover {
+    color: var(--ink);
+    background: var(--raised);
   }
 
-  .oto-settings button:not(:disabled):hover {
-    border-color: rgb(255 255 255 / 0.2);
-    background-color: rgb(255 255 255 / 0.08);
+  .btn:not(:disabled):hover {
+    border-color: var(--etch-strong);
+    background: var(--raised-hot);
   }
 
-  .oto-settings button[class*="bg-sky-"]:not(:disabled):hover,
-  .oto-settings button[class*="bg-violet-"]:not(:disabled):hover,
-  .settings-actionbar__button:not(:disabled):hover {
-    background: rgb(29 137 151 / 0.82) !important;
-  }
-}
-
-/* Navigation buttons intentionally avoid the raised control treatment. */
-.oto-settings .settings-nav-button {
-  border-color: transparent !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.oto-settings .settings-nav-button[data-active="true"] {
-  border-color: var(--color-rule) !important;
-  background: rgb(255 255 255 / 0.07) !important;
-  box-shadow:
-    inset 2px 0 0 var(--color-accent),
-    inset 0 1px 0 rgb(255 255 255 / 0.035) !important;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .oto-settings .settings-nav-button:not([data-active="true"]):hover {
-    border-color: transparent !important;
-    background: rgb(255 255 255 / 0.035) !important;
-  }
-}
-
-@media (min-width: 48rem) {
-  .models-grid {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  }
-}
-
-@media (max-width: 43.74rem) {
-  .oto-settings {
-    grid-template:
-      "titlebar" 2.5rem
-      "compact" 3.4rem
-      "main" minmax(0, 1fr) /
-      minmax(0, 1fr);
+  .btn--primary:not(:disabled):hover {
+    background: var(--lamp-hot);
   }
 
-  .settings-sidebar {
-    display: none;
+  .btn--quiet:not(:disabled):hover {
+    color: var(--ink);
+    background: var(--raised);
   }
 
-  .settings-compact-nav {
-    grid-area: compact;
-    display: grid;
-    align-items: center;
-    padding-inline: 1rem;
-    border-block-end: var(--rule-thin) solid var(--color-rule);
-    background: var(--color-sidebar-glass);
+  .btn-link:hover {
+    color: var(--ink);
   }
 
-  .settings-stage {
-    padding: 1.5rem 1rem 6rem;
+  .btn-link--danger:hover {
+    color: var(--signal-clip);
   }
 
-  .settings-actionbar {
-    inset-inline-start: 0;
-    padding-inline: 1rem;
+  .oto-app input:not(:disabled):hover,
+  .oto-app select:not(:disabled):hover,
+  .oto-app textarea:not(:disabled):hover,
+  .oto-app-plain input:not(:disabled):hover,
+  .oto-app-plain select:not(:disabled):hover,
+  .oto-app-plain textarea:not(:disabled):hover {
+    border-color: var(--etch-strong);
   }
 
-  .settings-actionbar__note {
-    display: none;
+  .choice:hover {
+    border-color: var(--etch-strong);
   }
 
-  .provider-row {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
+  .seg__option:hover {
+    color: var(--ink-2);
   }
 
-  .provider-row__label {
-    padding-block-start: 0;
-  }
-
-  .provider-key-control {
-    grid-template-columns: 1fr;
+  .icon-btn:not(:disabled):hover {
+    color: var(--ink);
+    background: var(--raised);
   }
 }
 
-@media (max-width: 39rem) {
-  .pipeline-map {
+/* ─── Layout breakpoints ────────────────────────────────────────────────── */
+
+@media (min-width: 40rem) {
+  .stage__inner {
+    padding: var(--space-xl) var(--space-xl) 6.5rem;
+  }
+
+  .actionbar {
+    padding-inline: var(--space-xl);
+  }
+
+  /* The spec-sheet layout: a fixed label column against a control column that
+     stops well short of the window edge, while the rule below runs full width. */
+  .row {
+    grid-template-columns: minmax(9rem, 12rem) minmax(0, 30rem);
+  }
+
+  .row--switch {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .row--stacked {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .item__grid--pair,
+  .field-grid--pair {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
-  .pipeline-stage__arrow {
+@media (min-width: 52rem) {
+  .oto-app {
+    grid-template-columns: 16.5rem minmax(0, 1fr);
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .topbar {
     display: none;
   }
 
-  .settings-actionbar > div,
-  .settings-actionbar__button {
-    width: 100%;
+  .rail {
+    display: flex;
+  }
+
+  .actionbar {
+    inset-inline-start: 16.5rem;
+  }
+
+  .actionbar__note {
+    display: block;
   }
 }
+
+@media (max-width: 39.99rem) {
+  .actionbar__save {
+    flex: 1;
+  }
+
+  .chain {
+    flex-wrap: wrap;
+  }
+
+  .chain__stage {
+    flex-basis: 50%;
+  }
+}
+
+/* ─── Reduced motion ────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 1ms !important;
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+    scroll-behavior: auto;
+    transition-duration: 1ms;
   }
 }
 
 :root[data-reduce-motion="true"] *,
 :root[data-reduce-motion="true"] *::before,
 :root[data-reduce-motion="true"] *::after {
-  animation-duration: 1ms !important;
-  animation-iteration-count: 1 !important;
-  scroll-behavior: auto !important;
-  transition-duration: 1ms !important;
+  animation-duration: 1ms;
+  animation-iteration-count: 1;
+  scroll-behavior: auto;
+  transition-duration: 1ms;
+}
+
+/* ─── macOS window chrome ───────────────────────────────────────────────── */
+
+/* The settings window runs `titleBarStyle: "Overlay"` with `hiddenTitle`, so
+   there is no title bar to lay out around — only three traffic lights floating
+   at (16, 14) over whatever the page draws in its top-left corner. Every shell
+   that can occupy that corner reserves the strip below them, and the reserved
+   strip doubles as the drag handle the missing title bar would have provided. */
+:root {
+  /* Clears a 12px light at y=14 plus breathing room. */
+  --mac-titlebar: 2.25rem;
+  /* Clears all three lights plus the gap after them, for horizontal layouts. */
+  --mac-lights: 5.25rem;
+}
+
+/* The rail owns the corner at wide widths: push the wordmark below the lights. */
+.rail__plate {
+  padding-block-start: var(--mac-titlebar);
+}
+
+/* Below 52rem the rail is hidden and the top bar takes the corner, so the lights
+   sit beside its content rather than above it. */
+.topbar {
+  padding-inline-start: var(--mac-lights);
+}
+
+/* Onboarding and the load/error states render without a rail, so they carry the
+   reserved strip themselves. */
+.oto-app-plain {
+  padding-block-start: var(--mac-titlebar);
+}
+
+/* Anything marked draggable must not also select on drag, and controls inside a
+   drag region need `no-drag` back or the click never lands. */
+[data-tauri-drag-region] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] input,
+[data-tauri-drag-region] select,
+[data-tauri-drag-region] a {
+  -webkit-app-region: no-drag;
 }

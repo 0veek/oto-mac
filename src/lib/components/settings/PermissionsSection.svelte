@@ -3,12 +3,21 @@
   import { invoke } from "@tauri-apps/api/core";
   import {
     IconAlertTriangle,
+    IconArrowRight,
     IconCircleCheck,
     IconCircleX,
     IconHelpCircle,
+    IconPointer,
     IconRefresh,
     IconShieldCheck,
   } from "@tabler/icons-svelte";
+
+  let {
+    onselect,
+  }: {
+    /** Navigate to another settings section without a full page remount. */
+    onselect?: (id: string) => void;
+  } = $props();
 
   type PermissionItem = {
     id: string;
@@ -50,19 +59,19 @@
     }
   }
 
-  function statusTone(status: string): string {
+  // TCC states borrow the meter's zones: safe when granted, clipped when refused,
+  // lamp-lit while still waiting on you, unlit when it does not matter.
+  function statusTone(status: string): "ok" | "bad" | "warn" | "idle" {
     switch (status) {
       case "granted":
-        return "text-emerald-300 bg-emerald-400/10 ring-emerald-400/25";
+        return "ok";
       case "denied":
       case "restricted":
-        return "text-rose-300 bg-rose-400/10 ring-rose-400/25";
-      case "recommended":
-        return "text-sky-300 bg-sky-400/10 ring-sky-400/25";
+        return "bad";
       case "not_determined":
-        return "text-amber-200 bg-amber-400/10 ring-amber-400/25";
+        return "warn";
       default:
-        return "text-slate-300 bg-white/5 ring-white/10";
+        return "idle";
     }
   }
 
@@ -129,6 +138,8 @@
     }
   }
 
+  // A toggle flipped in System Settings never notifies us, so the report is polled
+  // while this section is on screen.
   onMount(() => {
     void refresh();
     const id = setInterval(() => {
@@ -138,97 +149,76 @@
   });
 </script>
 
-<section class="space-y-6">
-  <header>
-    <h2 class="text-xl font-semibold tracking-tight">Permissions</h2>
-    <p class="mt-1 text-sm text-slate-400">
-      Check whether macOS has granted Oto everything it needs for dictation and text insertion.
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Permissions</h2>
+    <p class="section__lead">
+      What macOS has granted Oto: the microphone it listens through, and the
+      Accessibility API it types with.
     </p>
   </header>
 
   <div
-    class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-xl"
+    role="status"
+    class="note"
+    class:note--ok={report?.allRequiredGranted}
+    class:note--warn={report != null && !report.allRequiredGranted}
   >
-    <div
-      class="flex flex-wrap items-start justify-between gap-3 rounded-xl border px-4 py-3 {report?.allRequiredGranted
-        ? 'border-emerald-400/25 bg-emerald-400/5'
-        : 'border-amber-400/25 bg-amber-400/5'}"
-    >
-      <div class="flex items-start gap-3">
-        {#if report?.allRequiredGranted}
-          <IconShieldCheck class="mt-0.5 shrink-0 text-emerald-300" size={22} stroke={1.7} />
-        {:else}
-          <IconAlertTriangle class="mt-0.5 shrink-0 text-amber-200" size={22} stroke={1.7} />
-        {/if}
-        <div>
-          <p
-            class="text-sm font-medium {report?.allRequiredGranted
-              ? 'text-emerald-100'
-              : 'text-amber-100'}"
-          >
-            {report ? report.summary : "Checking permissions…"}
-          </p>
-          {#if report}
-            <p class="mt-1 text-xs text-slate-400">
-              App: <span class="font-mono text-slate-300">{report.displayName}</span>
-              · {report.bundled ? "bundled Oto.app" : "dev binary"}
-            </p>
-          {/if}
-        </div>
-      </div>
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-white/15 transition hover:bg-white/15 disabled:opacity-50"
-        disabled={busy}
-        onclick={refresh}
-      >
-        <IconRefresh size={14} stroke={1.8} />
+    {#if report?.allRequiredGranted}
+      <IconShieldCheck aria-hidden="true" size={16} stroke={1.7} />
+    {:else}
+      <IconAlertTriangle aria-hidden="true" size={16} stroke={1.8} />
+    {/if}
+    <div class="note__body">
+      <p><strong>{report ? report.summary : "Checking permissions…"}</strong></p>
+      {#if report}
+        <p>
+          Listed as <span class="readout-tight">{report.displayName}</span> —
+          {report.bundled ? "bundled Oto.app" : "dev binary"}.
+        </p>
+      {/if}
+      <button type="button" class="btn btn--small" disabled={busy} onclick={refresh}>
+        <IconRefresh aria-hidden="true" size={14} stroke={1.8} />
         {busy ? "Checking…" : "Check permissions"}
       </button>
     </div>
+  </div>
 
-    {#if report}
-      <ul class="space-y-3">
-        {#each report.items as item (item.id)}
-          <li
-            class="rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                {#if item.status === "granted"}
-                  <IconCircleCheck class="text-emerald-400" size={18} stroke={1.8} />
-                {:else if item.status === "denied" || item.status === "restricted"}
-                  <IconCircleX class="text-rose-400" size={18} stroke={1.8} />
-                {:else}
-                  <IconHelpCircle class="text-amber-300" size={18} stroke={1.8} />
-                {/if}
-                <span class="text-sm font-medium text-slate-100">{item.name}</span>
-                {#if item.required}
-                  <span class="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-400"
-                    >Required</span
-                  >
-                {:else}
-                  <span class="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-500"
-                    >Optional</span
-                  >
-                {/if}
-              </div>
-              <span
-                class="rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 {statusTone(
-                  item.status,
-                )}"
-              >
-                {statusLabel(item.status)}
+  {#if error}
+    <p role="alert" class="note note--bad">{error}</p>
+  {/if}
+
+  {#if report}
+    <div class="items">
+      {#each report.items as item (item.id)}
+        <div class="item">
+          <div class="item__head">
+            <span class="perm-head">
+              {#if item.status === "granted"}
+                <IconCircleCheck class="status-ok" aria-hidden="true" size={16} stroke={1.8} />
+              {:else if item.status === "denied" || item.status === "restricted"}
+                <IconCircleX class="status-bad" aria-hidden="true" size={16} stroke={1.8} />
+              {:else}
+                <IconHelpCircle class="status-warn" aria-hidden="true" size={16} stroke={1.8} />
+              {/if}
+              <span class="item__title">{item.name}</span>
+              <span class="plate-micro perm-flag">
+                {item.required ? "Required" : "Optional"}
               </span>
-            </div>
-            <p class="mt-2 whitespace-pre-line text-xs leading-relaxed text-slate-400">
-              {item.detail}
-            </p>
-            <div class="mt-3 flex flex-wrap gap-2">
+            </span>
+            <span class="plate-micro perm-state" data-tone={statusTone(item.status)}>
+              {statusLabel(item.status)}
+            </span>
+          </div>
+
+          <p class="item__body perm-detail">{item.detail}</p>
+
+          {#if item.canOpenSettings || item.status !== "granted"}
+            <div class="btn-row">
               {#if item.canOpenSettings}
                 <button
                   type="button"
-                  class="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-white/15 transition hover:bg-white/15 disabled:opacity-50"
+                  class="btn btn--small"
                   disabled={busy}
                   onclick={() => openSettings(item.id)}
                 >
@@ -238,25 +228,20 @@
               {#if item.id === "accessibility" && item.status !== "granted"}
                 <button
                   type="button"
-                  class="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-white/90 ring-1 ring-white/10 transition hover:bg-white/10 disabled:opacity-50"
+                  class="btn btn--small"
                   disabled={busy}
                   onclick={requestAccessibility}
                 >
                   Request Accessibility
                 </button>
-                <button
-                  type="button"
-                  class="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-white/90 ring-1 ring-white/10 transition hover:bg-white/10 disabled:opacity-50"
-                  disabled={busy}
-                  onclick={revealApp}
-                >
+                <button type="button" class="btn btn--small" disabled={busy} onclick={revealApp}>
                   Reveal app in Finder
                 </button>
               {/if}
               {#if item.id === "microphone" && item.status !== "granted"}
                 <button
                   type="button"
-                  class="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-white/90 ring-1 ring-white/10 transition hover:bg-white/10 disabled:opacity-50"
+                  class="btn btn--small"
                   disabled={busy}
                   onclick={requestMicrophone}
                 >
@@ -264,43 +249,117 @@
                 </button>
               {/if}
             </div>
-          </li>
-        {/each}
-      </ul>
+          {/if}
+        </div>
+      {/each}
+    </div>
 
-      {#if report.executablePath}
-        <p class="break-all rounded-lg bg-black/20 px-3 py-2 font-mono text-[11px] text-slate-500">
-          {report.executablePath}
-        </p>
-      {/if}
+    {#if report.executablePath}
+      <div class="field">
+        <span class="plate-micro field__label">Binary macOS is checking</span>
+        <pre class="output">{report.executablePath}</pre>
+      </div>
     {/if}
+  {/if}
 
-    {#if error}
-      <p role="alert" class="text-sm text-rose-400">{error}</p>
-    {/if}
+  {#if onselect}
+    <div class="pairs">
+      <div class="pair">
+        <span class="pair__icon">
+          <IconPointer aria-hidden="true" size={16} stroke={1.7} />
+        </span>
+        <span class="pair__copy">
+          <strong>Typing into other windows</strong>
+          <span>How finished text reaches the application you were using.</span>
+        </span>
+        <button type="button" class="btn-link pair__side" onclick={() => onselect?.("injection")}>
+          Check insertion
+          <IconArrowRight aria-hidden="true" size={14} stroke={1.8} />
+        </button>
+      </div>
+    </div>
+  {/if}
 
-    <div class="rounded-xl border border-white/10 bg-slate-900/30 px-4 py-3 text-xs leading-relaxed text-slate-400">
-      <p class="font-medium text-slate-300">Tips</p>
-      <ul class="mt-1.5 list-disc space-y-1 pl-4">
+  <details class="disclosure">
+    <summary>Oto is missing from the Accessibility list</summary>
+    <div class="disclosure__body">
+      <ul>
         <li>
-          Prefer <strong>/Applications/Oto.app</strong>. Do not drag-copy from the build folder —
-          that often breaks the signature so Accessibility never lists Oto. Use
-          <code class="rounded bg-white/5 px-1">npm run app:install</code> from the repo.
+          Run <strong>/Applications/Oto.app</strong>. Drag-copying out of the build folder usually
+          breaks the signature, and an unsigned copy never appears in the list — use
+          <span class="readout-tight">npm run app:install</span> from the repo instead.
         </li>
         <li>
-          After enabling a toggle in System Settings, use <strong>Check permissions</strong> (or
-          quit and reopen Oto from Applications).
+          After flipping a toggle in System Settings, press <strong>Check permissions</strong>, or
+          quit and reopen Oto from Applications.
         </li>
         <li>
-          Rebuilds create a new identity — remove old <code class="rounded bg-white/5 px-1">Oto</code>
-          / <code class="rounded bg-white/5 px-1">oto</code> rows, then <strong>+</strong> add
-          <strong>/Applications/Oto.app</strong> only.
+          Every rebuild is a new identity to macOS. Remove the stale
+          <span class="readout-tight">Oto</span> and <span class="readout-tight">oto</span> rows,
+          then <strong>+</strong> add <strong>/Applications/Oto.app</strong> only.
         </li>
         <li>
-          Insertion needs <strong>Accessibility</strong>. Dictation needs
+          Insertion needs <strong>Accessibility</strong>; dictation needs
           <strong>Microphone</strong>.
         </li>
       </ul>
     </div>
-  </div>
+  </details>
 </section>
+
+<style>
+  .note__body {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .note__body .btn {
+    justify-self: start;
+  }
+
+  .perm-head {
+    display: flex;
+    align-items: center;
+    gap: 0.4375rem;
+    min-width: 0;
+  }
+
+  .perm-flag {
+    flex: 0 0 auto;
+    color: var(--faint);
+  }
+
+  /* The TCC state chip: an unlit plate that takes a meter colour once macOS has
+     actually decided something. */
+  .perm-state {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 0.1875rem 0.4375rem;
+    border: var(--rule) solid var(--etch-strong);
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--well);
+  }
+
+  .perm-state[data-tone="ok"] {
+    border-color: var(--signal-safe);
+    color: var(--signal-safe);
+  }
+
+  .perm-state[data-tone="bad"] {
+    border-color: var(--signal-clip);
+    color: var(--signal-clip);
+  }
+
+  .perm-state[data-tone="warn"] {
+    border-color: var(--lamp);
+    color: var(--lamp-text);
+  }
+
+  /* The backend writes these details as multiple lines. */
+  .perm-detail {
+    white-space: pre-line;
+  }
+</style>

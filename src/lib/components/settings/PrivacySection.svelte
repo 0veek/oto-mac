@@ -10,14 +10,32 @@
   $effect(() => { invoke<boolean>("sync_token_present").then((value) => tokenPresent = value).catch(() => tokenPresent = false); });
 
   async function saveToken() {
+    // Saving an empty field used to delete the stored token without warning.
+    if (!token.trim()) {
+      status = "Enter a token first, or use Remove to delete the stored one.";
+      return;
+    }
     status = null;
     try {
-      await invoke("set_sync_token", { token });
-      tokenPresent = token.trim().length > 0;
+      await invoke("set_sync_token", { token: token.trim() });
+      tokenPresent = true;
       token = "";
-      status = tokenPresent ? "Sync token saved to the keyring." : "Sync token cleared.";
+      status = "Sync token saved to the Keychain.";
     } catch (error) {
       status = `Failed to save token: ${String(error)}`;
+    }
+  }
+
+  async function removeToken() {
+    if (!confirm("Delete the stored sync bearer token from the macOS Keychain?")) return;
+    status = null;
+    try {
+      await invoke("set_sync_token", { token: "" });
+      tokenPresent = false;
+      token = "";
+      status = "Sync token removed from the Keychain.";
+    } catch (error) {
+      status = `Failed to remove token: ${String(error)}`;
     }
   }
   async function syncNow() {
@@ -34,114 +52,240 @@
   }
 </script>
 
-<section class="space-y-6">
-  <header><h2 class="text-xl font-semibold tracking-tight">Privacy &amp; sync</h2><p class="mt-1 text-sm text-slate-400">History stays local. Sync is disabled until you configure and explicitly run it.</p></header>
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-    <div>
-      <h3 class="text-sm font-semibold tracking-tight text-slate-200">
-        What the cleanup model is told
-      </h3>
-      <p class="mt-1 text-xs text-slate-500">
-        Knowing where text is going lets the model format for it — short lines in a chat client,
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Privacy</h2>
+    <p class="section__lead">
+      What Oto is allowed to say about where you are typing, what it keeps on this
+      machine, and the one place it will send anything on your instruction.
+    </p>
+  </header>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">What the cleanup model is told</span>
+      <p class="rack__note">
+        Knowing where text is heading lets the model format for it — short lines in a chat client,
         prose in an email, no markdown in a terminal. It is also what leaves your machine, so each
-        step is opt-in. This applies only when cleanup is enabled.
+        step up is yours to choose. None of this applies when cleanup is off.
       </p>
     </div>
 
-    <div class="space-y-2">
-      {#each [
-        { value: "none", title: "Nothing", detail: "The model is told only what you said." },
-        { value: "app", title: "Application name", detail: "For example \"Slack\" or \"Terminal\"." },
-        {
-          value: "window",
-          title: "Application and window title",
-          detail: "Titles often contain file paths, channel names, and subject lines.",
-        },
-        {
-          value: "selection",
-          title: "Application, title, and nearby text",
-          detail: "Reads the selection through the macOS Accessibility API. Best results, most disclosure.",
-        },
-      ] as const as option (option.value)}
-        <label
-          class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3 transition hover:border-white/20"
-        >
-          <input
-            type="radio"
-            name="context-level"
-            value={option.value}
-            class="mt-0.5 h-4 w-4 shrink-0 border-white/20 bg-slate-900 text-sky-500 focus:ring-sky-400/30"
-            bind:group={config.context_level}
-          />
-          <span class="min-w-0">
-            <span class="block text-sm font-medium text-slate-200">{option.title}</span>
-            <span class="block text-xs text-slate-500">{option.detail}</span>
-          </span>
-        </label>
-      {/each}
+    <div class="row row--stacked" role="radiogroup" aria-label="Disclose">
+      <span class="row__label">Disclose</span>
+      <div class="row__control choice-list">
+        {#each [
+          { value: "none", title: "Nothing", detail: "The model sees only what you said." },
+          { value: "app", title: "The application name", detail: "Something like “Slack” or “Terminal”." },
+          {
+            value: "window",
+            title: "Application and window title",
+            detail: "Titles often carry file paths, channel names and subject lines.",
+          },
+          {
+            value: "selection",
+            title: "Application, title, and nearby text",
+            detail:
+              "Reads the selection through the macOS Accessibility API. The best results, and the most disclosure.",
+          },
+        ] as const as option (option.value)}
+          <label class="choice" data-active={config.context_level === option.value}>
+            <input type="radio" name="context-level" value={option.value} bind:group={config.context_level} />
+            <span class="choice__copy">
+              <strong>{option.title}</strong>
+              <span>{option.detail}</span>
+            </span>
+          </label>
+        {/each}
+      </div>
     </div>
 
-    <label class="block space-y-1.5">
-      <span class="text-sm text-slate-300">Never describe these applications</span>
-      <input
-        type="text"
-        spellcheck="false"
-        placeholder="my-journal, banking-app"
-        class="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"
-        value={config.context_blocklist.join(", ")}
-        onchange={(event) => {
-          config.context_blocklist = event.currentTarget.value
-            .split(",")
-            .map((entry) => entry.trim())
-            .filter(Boolean);
-        }}
-      />
-      <span class="block text-xs text-slate-500">
-        Comma separated, matched as a substring of the application name or bundle id. Password
-        managers, the keychain, and authenticators are always blocked and cannot be removed from
-        this list — a blocked application discloses nothing at all, not even its name. Use
-        <strong class="text-slate-400">Modes → Read focused application</strong> to see exactly what
-        would be sent.
+    <label class="row row--flush">
+      <span class="row__label">Never describe</span>
+      <span class="row__control">
+        <input
+          type="text"
+          spellcheck="false"
+          placeholder="my-journal, banking-app"
+          value={config.context_blocklist.join(", ")}
+          onchange={(event) => {
+            config.context_blocklist = event.currentTarget.value
+              .split(",")
+              .map((entry) => entry.trim())
+              .filter(Boolean);
+          }}
+        />
+        <span class="row__hint">
+          Comma separated, matched as a substring of the application name or bundle id. A blocked
+          application discloses nothing at all, not even its name. Password managers, the keychain
+          and authenticators are always blocked and cannot be taken off that list. Use
+          <strong>Modes → Read focused application</strong> to see exactly what would be sent.
+        </span>
       </span>
     </label>
   </div>
 
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-    <label class="flex items-center justify-between gap-4"><span><span class="block text-sm font-medium">Save local history</span><span class="block text-xs text-slate-500">Stored under Oto’s local application data directory.</span></span><input type="checkbox" bind:checked={config.history_enabled} /></label>
-    <label class="flex cursor-pointer items-center justify-between gap-4" class:opacity-50={!config.history_enabled}>
-      <span>
-        <span class="block text-sm font-medium">Keep dictation audio</span>
-        <span class="block text-xs text-slate-500">
-          Lets history replay a recording and re-transcribe it with different settings. Audio for
-          entries you delete — or that fall past the limit below — is removed with them.
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">History</span>
+    </div>
+
+    <label class="row row--switch">
+      <span class="row__copy">
+        <strong>Keep what I dictate</strong>
+        <span>Stored under Oto's local application data directory, on this machine only.</span>
+      </span>
+      <input type="checkbox" bind:checked={config.history_enabled} />
+    </label>
+
+    <label class="row row--switch">
+      <span class="row__copy">
+        <strong>Keep the audio too</strong>
+        <span>
+          Lets you replay a recording and transcribe it again with different settings. Audio goes
+          when its entry goes, whether you delete it or it falls past the limit below.
         </span>
       </span>
-      <input type="checkbox" disabled={!config.history_enabled} bind:checked={config.keep_history_audio} />
-    </label>
-    <label class="block space-y-1.5" class:opacity-50={!config.history_enabled}>
-      <span class="text-sm text-slate-300">Maximum entries</span>
       <input
-        type="number"
-        min="1"
-        max="1000"
+        type="checkbox"
         disabled={!config.history_enabled}
-        class="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"
-        value={config.history_limit}
-        oninput={(event) => {
-          const next = Number(event.currentTarget.value);
-          config.history_limit = Number.isFinite(next)
-            ? Math.min(1000, Math.max(1, Math.round(next)))
-            : 100;
-        }}
+        bind:checked={config.keep_history_audio}
       />
     </label>
+
+    <label class="row row--flush">
+      <span class="row__label">Keep at most</span>
+      <span class="row__control">
+        <input
+          type="number"
+          min="1"
+          max="1000"
+          disabled={!config.history_enabled}
+          value={config.history_limit}
+          oninput={(event) => {
+            const next = Number(event.currentTarget.value);
+            config.history_limit = Number.isFinite(next)
+              ? Math.min(1000, Math.max(1, Math.round(next)))
+              : 100;
+          }}
+        />
+        <span class="row__hint">Older dictations drop off once you pass this.</span>
+      </span>
+    </label>
   </div>
-  <div class="space-y-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-    <label class="flex items-center justify-between gap-4"><span><span class="block text-sm font-medium">Enable user-controlled sync</span><span class="block text-xs text-slate-500">Merges dictionary, snippets, and styles through a JSON GET/PUT endpoint.</span></span><input type="checkbox" bind:checked={config.sync.enabled} /></label>
-    <label class="block space-y-1.5" class:opacity-50={!config.sync.enabled}><span class="text-sm text-slate-300">HTTPS document endpoint</span><input type="url" disabled={!config.sync.enabled} placeholder="https://example.com/private/oto.json" class="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm" bind:value={config.sync.endpoint} /></label>
-    <div class="flex gap-2" class:opacity-50={!config.sync.enabled}><input type="password" disabled={!config.sync.enabled} class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm" placeholder={tokenPresent ? "Replace saved bearer token…" : "Optional bearer token"} bind:value={token} /><button type="button" disabled={!config.sync.enabled} class="rounded-xl bg-white/10 px-4 py-2.5 text-sm hover:bg-white/15" onclick={saveToken}>Save token</button></div>
-    <button type="button" disabled={!config.sync.enabled || busy} class="rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50" onclick={syncNow}>{busy ? "Syncing…" : "Sync now"}</button>
-    {#if status}<p aria-live="polite" class="text-sm {status.startsWith('Sync failed') ? 'text-rose-300' : 'text-slate-300'}">{status}</p>{/if}
-    <p class="text-xs leading-relaxed text-slate-500">Local values win when an item has the same ID; remote-only items are added. Oto never syncs API keys, history, audio, or provider credentials.</p>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Sync</span>
+      <!-- The merge is local-wins here: `merge_by_id` in src-tauri only appends
+           ids it does not already hold, so an edit made elsewhere never
+           overwrites this machine's copy. -->
+      <p class="rack__note">
+        Off until you set it up and press the button yourself. Where two items share an ID your
+        local copy wins; anything only on the remote is added. API keys, history, audio and provider
+        credentials are never synced.
+      </p>
+    </div>
+
+    <label class="row row--switch">
+      <span class="row__copy">
+        <strong>Sync to my own endpoint</strong>
+        <span>Merges your dictionary, snippets and styles through a JSON GET and PUT.</span>
+      </span>
+      <input type="checkbox" bind:checked={config.sync.enabled} />
+    </label>
+
+    <label class="row">
+      <span class="row__label">Endpoint</span>
+      <span class="row__control">
+        <input
+          type="url"
+          class="field-data"
+          disabled={!config.sync.enabled}
+          placeholder="https://example.com/private/oto.json"
+          bind:value={config.sync.endpoint}
+        />
+      </span>
+    </label>
+
+    <div class="row">
+      <span class="row__label">Bearer token</span>
+      <div class="row__control">
+        <div class="btn-row token">
+          <input
+            type="password"
+            class="field-data token__input"
+            aria-label="Bearer token"
+            disabled={!config.sync.enabled}
+            placeholder={tokenPresent ? "Enter a new token to replace it" : "Optional"}
+            bind:value={token}
+          />
+          <button
+            type="button"
+            class="btn"
+            disabled={!config.sync.enabled || !token.trim()}
+            onclick={saveToken}
+          >
+            Save token
+          </button>
+          {#if tokenPresent}
+            <button
+              type="button"
+              class="btn btn--danger"
+              disabled={!config.sync.enabled}
+              onclick={removeToken}
+            >
+              Remove
+            </button>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <div class="row row--switch row--flush">
+      <span class="row__copy">
+        <strong>Sync now</strong>
+        <span>Nothing is sent until you press this.</span>
+      </span>
+      <button type="button" class="btn" disabled={!config.sync.enabled || busy} onclick={syncNow}>
+        {busy ? "Syncing…" : "Sync"}
+      </button>
+    </div>
+
+    {#if status}
+      <p
+        aria-live="polite"
+        class="note sync-status"
+        class:note--bad={status.startsWith("Sync failed") || status.startsWith("Failed")}
+        class:note--ok={!status.startsWith("Sync failed") && !status.startsWith("Failed")}
+      >
+        {status}
+      </p>
+    {/if}
   </div>
 </section>
+
+<style>
+  .token {
+    flex-wrap: nowrap;
+  }
+
+  .token__input {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .sync-status {
+    margin-block-start: var(--space-sm);
+  }
+
+  @media (max-width: 30rem) {
+    .token {
+      flex-wrap: wrap;
+    }
+
+    .token__input {
+      flex-basis: 100%;
+    }
+  }
+</style>

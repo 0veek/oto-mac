@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { IconCircleCheck, IconDeviceFloppy } from "@tabler/icons-svelte";
-  import type { AppConfig } from "$lib/types";
+  import { listen } from "@tauri-apps/api/event";
+  import { IconCircleCheck } from "@tabler/icons-svelte";
+  import type { AppConfig, PipelineEvent } from "$lib/types";
+  import { applyPipelineEvent } from "$lib/stores/pipeline";
   import SettingsShell from "$lib/components/settings/SettingsShell.svelte";
   import ProvidersSection from "$lib/components/settings/ProvidersSection.svelte";
   import ModelsSection from "$lib/components/settings/ModelsSection.svelte";
@@ -47,6 +49,12 @@
   let loadError = $state<string | null>(null);
   let saveStatus = $state<string | null>(null);
   let saving = $state(false);
+  /** Serialized copy of the last config the backend confirmed, for dirty tracking. */
+  let savedSnapshot = $state<string | null>(null);
+
+  const dirty = $derived(
+    config !== null && savedSnapshot !== null && JSON.stringify(config) !== savedSnapshot,
+  );
 
   const SAVABLE: SectionId[] = [
     "providers",
@@ -62,77 +70,113 @@
     "injection",
   ];
 
+  function browserPreviewDefaults(): AppConfig {
+    return {
+      provider_preset: "groq",
+      base_url: "https://api.groq.com/openai/v1",
+      stt_model: "whisper-large-v3",
+      polish_model: "llama-3.1-8b-instant",
+      polish_enabled: true,
+      temperature: 0.2,
+      tone_hint: "",
+      hotkey: "Ctrl+Super+Space",
+      language: null,
+      dictionary: [],
+      injection_mode: "auto",
+      idle_behavior: "hide",
+      overlay_x: null,
+      overlay_y: null,
+      stt_backend: "cloud",
+      local_whisper_model_path: "",
+      vocabulary_boost: true,
+      snippets: [],
+      styles: [
+        { id: "professional", name: "Professional", prompt: "Professional, clear, and concise." },
+        { id: "casual", name: "Casual", prompt: "Natural and friendly." },
+      ],
+      active_style_id: null,
+      history_enabled: true,
+      history_limit: 100,
+      streaming_enabled: false,
+      theme: "midnight",
+      reduce_motion: false,
+      font_scale: 1,
+      custom_providers: [],
+      active_custom_provider_id: null,
+      sync: { enabled: false, endpoint: "" },
+      // No `autostart_enabled` here: this port drives launch-at-login through
+      // tauri-plugin-autostart, so it is not part of AppConfig at all.
+      activation_mode: "hold",
+      hybrid_tap_threshold_ms: 350,
+      audio: {
+        input_device: null,
+        input_gain: 1,
+        noise_gate: false,
+        noise_gate_threshold: 0.02,
+      },
+      vad: { auto_stop: true, silence_ms: 1500, min_speech_ms: 400 },
+      sounds: {
+        enabled: false,
+        volume: 0.4,
+        on_start: true,
+        on_stop: true,
+        on_done: false,
+        on_error: true,
+      },
+      modes: [],
+      voice_edits_enabled: true,
+      replacements: [],
+      keep_history_audio: false,
+      onboarding_complete: true,
+      context_level: "app",
+      context_blocklist: [],
+    };
+  }
+
+  /** True only outside a Tauri webview. `tauri dev` also serves over http://. */
+  function isBrowserPreview() {
+    return !("__TAURI_INTERNALS__" in window);
+  }
+
   async function loadConfig() {
     loadError = null;
     try {
       config = await invoke<AppConfig>("get_config");
+      savedSnapshot = JSON.stringify(config);
     } catch (e) {
-      // Browser/dev without Tauri: keep page usable for layout checks
-      const browserPreview = ["http:", "https:"].includes(window.location.protocol);
-      loadError = browserPreview ? null : String(e);
-      config = {
-        provider_preset: "groq",
-        base_url: "https://api.groq.com/openai/v1",
-        stt_model: "whisper-large-v3",
-        polish_model: "llama-3.1-8b-instant",
-        polish_enabled: true,
-        temperature: 0.2,
-        tone_hint: "",
-        hotkey: "Ctrl+Super+Space",
-        language: null,
-        dictionary: [],
-        injection_mode: "auto",
-        idle_behavior: "hide",
-        overlay_x: null,
-        overlay_y: null,
-        stt_backend: "cloud",
-        local_whisper_model_path: "",
-        vocabulary_boost: true,
-        snippets: [],
-        styles: [
-          { id: "professional", name: "Professional", prompt: "Professional, clear, and concise." },
-          { id: "casual", name: "Casual", prompt: "Natural and friendly." },
-        ],
-        active_style_id: null,
-        history_enabled: true,
-        history_limit: 100,
-        streaming_enabled: false,
-        theme: "midnight",
-        reduce_motion: false,
-        font_scale: 1,
-        custom_providers: [],
-        active_custom_provider_id: null,
-        sync: { enabled: false, endpoint: "" },
-        activation_mode: "hold",
-        hybrid_tap_threshold_ms: 350,
-        audio: {
-          input_device: null,
-          input_gain: 1,
-          noise_gate: false,
-          noise_gate_threshold: 0.02,
-        },
-        vad: { auto_stop: true, silence_ms: 1500, min_speech_ms: 400 },
-        sounds: {
-          enabled: false,
-          volume: 0.4,
-          on_start: true,
-          on_stop: true,
-          on_done: false,
-          on_error: true,
-        },
-        modes: [],
-        context_level: "app",
-        context_blocklist: [],
-        voice_edits_enabled: true,
-        replacements: [],
-        keep_history_audio: false,
-        onboarding_complete: true,
-      };
+      // Browser without Tauri: keep the page usable for layout checks only.
+      // Never install defaults into a live Tauri session — Save would wipe disk config.
+      if (isBrowserPreview()) {
+        loadError = null;
+        config = browserPreviewDefaults();
+        savedSnapshot = JSON.stringify(config);
+      } else {
+        loadError = String(e);
+        config = null;
+        savedSnapshot = null;
+      }
+    }
+  }
+
+  // This backend has no `config://changed` broadcast, so the snapshot can only be
+  // refreshed by asking. Coming back to the front is the moment that matters: the
+  // pill writes its own coordinates when dragged, and adopting them here stops the
+  // stale draft from moving it back on the next save. Reading disk never touches
+  // the user's edits, so a genuinely dirty form stays dirty.
+  async function resyncSavedSnapshot() {
+    if (!config || saving) return;
+    try {
+      const latest = await invoke<AppConfig>("get_config");
+      config.overlay_x = latest.overlay_x;
+      config.overlay_y = latest.overlay_y;
+      savedSnapshot = JSON.stringify(latest);
+    } catch {
+      // Keep the previous snapshot; the form stays usable either way.
     }
   }
 
   async function saveConfig() {
-    if (!config || saving) return;
+    if (!config || saving || loadError) return;
     saving = true;
     saveStatus = null;
     try {
@@ -145,6 +189,7 @@
       // Reload so server-side normalization (hotkey formatting, etc.) is reflected.
       try {
         config = await invoke<AppConfig>("get_config");
+        savedSnapshot = JSON.stringify(config);
       } catch {
         // Keep local draft if reload fails.
       }
@@ -153,7 +198,22 @@
         if (saveStatus === "Saved") saveStatus = null;
       }, 2000);
     } catch (e) {
-      saveStatus = `Save failed: ${String(e)}`;
+      const message = String(e);
+      // A rejected chord is the one failure the backend recovers from: it keeps
+      // the last shortcut that bound and still persists every other change.
+      // Reload so the form shows exactly what is now on disk.
+      const hotkeyFailure = ["hotkey", "shortcut"].some((term) =>
+        message.toLowerCase().includes(term),
+      );
+      try {
+        config = await invoke<AppConfig>("get_config");
+        savedSnapshot = JSON.stringify(config);
+        saveStatus = hotkeyFailure
+          ? `Hotkey not registered: ${message} Your other changes were saved and the previous shortcut is still active.`
+          : `Save failed: ${message}. Reloaded last saved settings.`;
+      } catch {
+        saveStatus = `Save failed: ${message}`;
+      }
     } finally {
       saving = false;
     }
@@ -172,7 +232,23 @@
       }
     };
     window.addEventListener("keydown", onKeydown);
-    return () => window.removeEventListener("keydown", onKeydown);
+
+    const onFocus = () => void resyncSavedSnapshot();
+    window.addEventListener("focus", onFocus);
+
+    // The rail's input meter is wired to the same broadcast the overlay uses, so
+    // the settings window shows real levels while you dictate or run a mic test.
+    // `.catch` is attached here, not in the teardown: outside a Tauri webview
+    // `listen` rejects immediately and would surface as an unhandled rejection.
+    const unlistenPipeline = listen<PipelineEvent>("pipeline://event", ({ payload }) => {
+      applyPipelineEvent(payload);
+    }).catch(() => null);
+
+    return () => {
+      window.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("focus", onFocus);
+      void unlistenPipeline.then((unlisten) => unlisten?.());
+    };
   });
 
   $effect(() => {
@@ -182,17 +258,30 @@
 
 {#if config && !config.onboarding_complete}
   <!-- First run only: an existing config.json always arrives with this set. -->
-  <div class="oto-settings-onboarding" data-theme={config.theme}>
+  <div class="oto-app-plain" data-theme={config.theme}>
+    <!-- No rail here to carry the traffic lights, so the reserved strip is the
+         window's only drag handle. -->
+    <div class="mac-drag" data-tauri-drag-region></div>
     <OnboardingWizard
       bind:config
       ondone={() => {
+        savedSnapshot = JSON.stringify(config);
         saveStatus = null;
       }}
     />
   </div>
 {:else if !config}
-  <div class="flex h-screen items-center justify-center bg-slate-950 text-slate-400">
-    Loading settings…
+  <div class="oto-app-plain boot">
+    <div class="mac-drag" data-tauri-drag-region></div>
+    {#if loadError}
+      <p class="plate-micro boot__label">No link to Oto</p>
+      <p class="boot__body">
+        Settings could not be read ({loadError}). Nothing on disk was changed.
+      </p>
+      <button type="button" class="btn" onclick={() => void loadConfig()}>Try again</button>
+    {:else}
+      <p class="plate-micro boot__label">Reading settings</p>
+    {/if}
   </div>
 {:else}
   <SettingsShell
@@ -204,14 +293,7 @@
       saveStatus = null;
     }}
   >
-    <div class="settings-stage">
-      {#if loadError}
-        <div
-          class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90"
-        >
-          Could not load config from Tauri ({loadError}). Showing defaults for UI preview.
-        </div>
-      {/if}
+    <div class="stage__inner">
 
       {#if active === "providers"}
         <ProvidersSection bind:config />
@@ -235,10 +317,15 @@
         <StatsSection />
       {:else if active === "appearance"}
         <AppearanceSection bind:config />
+      {:else if active === "permissions"}
+        <PermissionsSection
+          onselect={(id) => {
+            active = id as SectionId;
+            saveStatus = null;
+          }}
+        />
       {:else if active === "privacy"}
         <PrivacySection bind:config />
-      {:else if active === "permissions"}
-        <PermissionsSection />
       {:else if active === "injection"}
         <InjectionSection bind:config />
       {:else if active === "about"}
@@ -246,31 +333,66 @@
       {/if}
 
       {#if SAVABLE.includes(active)}
-        <div class="settings-actionbar">
-          <span class="settings-actionbar__note">
-            Changes are stored locally and take effect after saving.
-          </span>
-          <div class="flex items-center gap-3">
-            {#if saveStatus?.startsWith("Save failed")}
-              <span class="text-sm text-rose-400" role="alert">{saveStatus}</span>
-            {/if}
+        <div class="actionbar">
+          {#if dirty}
+            <span class="actionbar__note">Unsaved changes — ⌘S applies them.</span>
+          {/if}
+          {#if saveStatus && saveStatus !== "Saved"}
+            <span class="actionbar__status" role="alert">{saveStatus}</span>
+          {/if}
           <button
             type="button"
-            class="settings-actionbar__button"
+            class="btn btn--primary actionbar__save"
+            data-dirty={dirty}
             disabled={saving}
             onclick={saveConfig}
           >
             {#if saveStatus === "Saved"}
-              <IconCircleCheck aria-hidden="true" size={18} stroke={1.8} />
+              <IconCircleCheck aria-hidden="true" size={16} stroke={1.8} />
               Saved
             {:else}
-              <IconDeviceFloppy aria-hidden="true" size={18} stroke={1.8} />
-              {saving ? "Saving…" : "Save Changes"}
+              {saving ? "Saving…" : "Save changes"}
             {/if}
           </button>
-          </div>
         </div>
       {/if}
     </div>
   </SettingsShell>
 {/if}
+
+<style>
+  .boot {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: var(--space-sm);
+    min-height: 100dvh;
+    padding: var(--space-xl);
+    text-align: center;
+  }
+
+  .boot__label {
+    color: var(--faint);
+  }
+
+  .boot__body {
+    max-width: 34rem;
+    color: var(--muted);
+    font-size: var(--text-sm);
+    line-height: 1.55;
+  }
+
+  /* Sits exactly in the strip `.oto-app-plain` already reserves for the traffic
+     lights, so it covers no content while giving the title-bar-less window
+     something to be dragged by. Painted in the chassis colour because the strip
+     is padding, not a clip: without a fill, scrolled content would ride up
+     behind the traffic lights. */
+  .mac-drag {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline: 0;
+    z-index: var(--z-sticky);
+    height: var(--mac-titlebar);
+    background: var(--chassis);
+  }
+</style>

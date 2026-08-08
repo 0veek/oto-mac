@@ -43,197 +43,276 @@
   }
 </script>
 
-<section class="settings-section">
-  <header>
-    <h2>Models</h2>
-    <p>Configure the speech-to-text and post-processing pipeline.</p>
+<section class="section">
+  <header class="section__head">
+    <h2 class="section__title">Models</h2>
+    <p class="section__lead">
+      Which engine turns your voice into text, and what happens to that text before
+      it lands in the window you were using.
+    </p>
   </header>
 
-  <PipelineMap />
+  <PipelineMap {config} />
 
-  <div class="models-grid">
-    <div class="settings-panel model-column">
-      <div class="model-column__head">
-        <h3>Transcription model</h3>
-        <p>Choose where speech becomes text.</p>
-      </div>
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Transcription</span>
+      <p class="rack__note">Where speech becomes text.</p>
+    </div>
 
-      <fieldset class="setting-field">
-        <legend class="setting-field__label">Engine</legend>
-        <div class="engine-switch">
-          <label data-active={config.stt_backend === "cloud"}>
-            <input type="radio" name="stt_backend" value="cloud" checked={config.stt_backend === "cloud"} onchange={() => config.stt_backend = "cloud" as SttBackend} />
-            <IconCloud aria-hidden="true" size={17} stroke={1.6} />
+    <div class="row" role="radiogroup" aria-label="Engine">
+      <span class="row__label">Engine</span>
+      <div class="row__control">
+        <div class="seg">
+          <label class="seg__option" data-active={config.stt_backend === "cloud"}>
+            <input
+              type="radio"
+              name="stt_backend"
+              value="cloud"
+              checked={config.stt_backend === "cloud"}
+              onchange={() => (config.stt_backend = "cloud" as SttBackend)}
+            />
+            <IconCloud aria-hidden="true" size={15} stroke={1.6} />
             Cloud
           </label>
-          <label data-active={config.stt_backend === "local_whisper"}>
-            <input type="radio" name="stt_backend" value="local_whisper" checked={config.stt_backend === "local_whisper"} onchange={() => config.stt_backend = "local_whisper" as SttBackend} />
-            <IconCpu aria-hidden="true" size={17} stroke={1.6} />
-            Local Whisper
+          <label class="seg__option" data-active={config.stt_backend === "local_whisper"}>
+            <input
+              type="radio"
+              name="stt_backend"
+              value="local_whisper"
+              checked={config.stt_backend === "local_whisper"}
+              onchange={() => (config.stt_backend = "local_whisper" as SttBackend)}
+            />
+            <IconCpu aria-hidden="true" size={15} stroke={1.6} />
+            On this machine
           </label>
         </div>
-      </fieldset>
+      </div>
+    </div>
 
-      {#if config.stt_backend === "local_whisper"}
-        <label class="setting-field">
-          <span class="setting-field__label">Local ggml model path</span>
-          <input class="font-mono" type="text" placeholder="/home/you/.local/share/oto/ggml-base.en.bin" bind:value={config.local_whisper_model_path} />
-          <span class="setting-field__hint">Use a whisper.cpp-compatible ggml file. Transcription remains on-device.</span>
-        </label>
-        {#if config.polish_enabled}
-          <p class="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-xs text-amber-100/90">
-            Polish still sends the resulting text to its configured provider. Disable it or use a localhost profile for a fully local pipeline.
-          </p>
-        {/if}
-      {:else if activeProfile}
-        <label class="setting-field">
-          <span class="setting-field__label">STT model · {activeProfile.name}</span>
+    {#if config.stt_backend === "local_whisper"}
+      <label class="row">
+        <span class="row__label">Model file</span>
+        <span class="row__control">
           <input
-            class="font-mono"
+            class="field-data"
+            type="text"
+            placeholder="/home/you/.local/share/oto/ggml-base.en.bin"
+            bind:value={config.local_whisper_model_path}
+          />
+          <span class="row__hint">
+            A whisper.cpp ggml file. Audio never leaves this machine.
+          </span>
+        </span>
+      </label>
+
+      {#if config.polish_enabled}
+        <div class="row">
+          <span class="row__label"></span>
+          <p class="note note--warn row__control">
+            Transcription stays local, but cleanup still sends the text to its provider. Turn
+            cleanup off below for an entirely offline path.
+          </p>
+        </div>
+      {/if}
+    {:else if activeProfile}
+      <label class="row">
+        <span class="row__label">Speech model</span>
+        <span class="row__control">
+          <input
+            class="field-data"
             type="text"
             placeholder="whisper-large-v3"
             value={activeProfile.stt_model}
             oninput={(event) => patchActiveProfile({ stt_model: event.currentTarget.value })}
           />
-          <span class="setting-field__hint">Stored on the active custom provider profile (not the legacy global field).</span>
-        </label>
-      {:else}
-        <label class="setting-field">
-          <span class="setting-field__label">STT model</span>
+          <span class="row__hint">Stored on the “{activeProfile.name}” profile.</span>
+        </span>
+      </label>
+    {:else}
+      <label class="row">
+        <span class="row__label">Speech model</span>
+        <span class="row__control">
           <input
-            class="font-mono"
+            class="field-data"
             type="text"
             placeholder={config.provider_preset === "deepgram" ? "nova-3" : "whisper-large-v3"}
             bind:value={config.stt_model}
           />
-          <span class="setting-field__hint">
+          <span class="row__hint">
             {#if config.provider_preset === "deepgram"}
-              Deepgram model id (default <span class="font-mono">nova-3</span>). Also accepts nova-3-medical, nova-2, etc. smart_format and keyterm prompting are on by default.
+              A Deepgram model ID — <span class="readout-tight">nova-3</span> by default;
+              <span class="readout-tight">nova-3-medical</span> and
+              <span class="readout-tight">nova-2</span> also work.
+              <span class="readout-tight">smart_format</span> and keyterm prompting are on by
+              default.
             {:else}
-              The model identifier accepted by your active provider.
+              Whatever model ID your provider accepts.
             {/if}
           </span>
-        </label>
-      {/if}
+        </span>
+      </label>
+    {/if}
 
-      <label class="setting-field">
-        <span class="setting-field__label">Language</span>
+    <label class="row">
+      <span class="row__label">Language</span>
+      <span class="row__control">
         <input
           type="text"
-          placeholder="Auto detect"
+          placeholder="Detect automatically"
           value={config.language ?? ""}
           oninput={(event) => {
             const value = event.currentTarget.value;
             config.language = value.trim() === "" ? null : value.trim();
           }}
         />
-        <span class="setting-field__hint">ISO code preferred (en, es). Full names like English are accepted. Leave empty for auto-detect.</span>
-      </label>
-
-      <label class="setting-row">
-        <span class="setting-row__copy">
-          <strong>Vocabulary boost</strong>
-          <span>
-            {#if config.provider_preset === "deepgram"}
-              Send dictionary terms as Deepgram keyterm prompts (Nova-3 Keyterm Prompting).
-            {:else}
-              Bias transcription toward terms in your dictionary.
-            {/if}
-          </span>
+        <span class="row__hint">
+          An ISO code such as <span class="readout-tight">en</span> or
+          <span class="readout-tight">es</span>. Names like “English” work too. Leave it empty to
+          detect each time.
         </span>
-        <input type="checkbox" bind:checked={config.vocabulary_boost} />
-      </label>
+      </span>
+    </label>
+
+    <label class="row row--switch row--flush">
+      <span class="row__copy">
+        <strong>Bias toward your dictionary</strong>
+        <!-- Deepgram takes the terms literally, as Nova-3 keyterm prompts, so the
+             copy says so rather than promising a vague nudge. -->
+        <span>
+          {#if config.provider_preset === "deepgram"}
+            Sends dictionary terms as Deepgram keyterm prompts (Nova-3 keyterm prompting).
+          {:else}
+            Nudges the engine toward the names and terms you have taught it.
+          {/if}
+        </span>
+      </span>
+      <input type="checkbox" bind:checked={config.vocabulary_boost} />
+    </label>
+  </div>
+
+  <div class="rack">
+    <div class="rack__head">
+      <span class="plate-micro rack__title">Cleanup</span>
+      <p class="rack__note">What happens to the transcript before Oto types it.</p>
     </div>
 
-    <div class="settings-panel model-column">
-      <div class="model-column__head">
-        <h3>Decoding &amp; polish</h3>
-        <p>Control interim text and final phrasing.</p>
-      </div>
-
-      <label class="setting-row">
-        <span class="setting-row__copy">
-          <strong>Live transcription</strong>
-          <span>
-            {#if config.provider_preset === "deepgram" && config.stt_backend === "cloud"}
-              Streams audio to Deepgram while you speak, so the transcript is ready almost as soon
-              as you stop. Falls back to a single upload if the connection drops.
-            {:else if config.stt_backend === "local_whisper"}
-              Re-runs local Whisper periodically to show interim text while you speak.
-            {:else}
-              Shows intermediate text when the engine provides it. Live streaming currently
-              requires Deepgram cloud or local Whisper.
-            {/if}
-          </span>
+    <label class="row row--switch">
+      <span class="row__copy">
+        <strong>Show text while you speak</strong>
+        <span>
+          {#if config.provider_preset === "deepgram" && config.stt_backend === "cloud"}
+            Streams to Deepgram as you talk, so the transcript is ready almost the moment you
+            stop. Falls back to a single upload if the connection drops.
+          {:else if config.stt_backend === "local_whisper"}
+            Re-runs Whisper periodically to show partial text.
+          {:else}
+            Shows partial text where the engine supports it. Today that means Deepgram or local
+            Whisper.
+          {/if}
         </span>
-        <input type="checkbox" bind:checked={config.streaming_enabled} />
-      </label>
+      </span>
+      <input type="checkbox" bind:checked={config.streaming_enabled} />
+    </label>
 
-      <label class="setting-row">
-        <span class="setting-row__copy">
-          <strong>Enable polish</strong>
-          <span>
-            {#if config.provider_preset === "deepgram"}
-              Requires an OpenAI-compatible LLM. Deepgram is STT-only (Nova-3 includes smart formatting).
-            {:else}
-              Refine grammar, punctuation, and tone before insertion.
-            {/if}
-          </span>
+    <label class="row row--switch">
+      <span class="row__copy">
+        <strong>Clean up the transcript</strong>
+        <span>
+          {#if config.provider_preset === "deepgram"}
+            Needs an OpenAI-compatible model. Deepgram only transcribes, though Nova-3 already
+            punctuates.
+          {:else}
+            Fixes grammar and punctuation, and applies your tone before insertion.
+          {/if}
         </span>
-        <input type="checkbox" bind:checked={config.polish_enabled} disabled={config.provider_preset === "deepgram"} />
-      </label>
+      </span>
+      <input
+        type="checkbox"
+        bind:checked={config.polish_enabled}
+        disabled={config.provider_preset === "deepgram"}
+      />
+    </label>
 
-      <label class="setting-field" class:opacity-50={!config.polish_enabled}>
-        <span class="setting-field__label">
-          Polish model{activeProfile ? ` · ${activeProfile.name}` : ""}
-        </span>
+    <label class="row">
+      <span class="row__label">Cleanup model</span>
+      <span class="row__control">
         {#if activeProfile}
           <input
-            class="font-mono"
+            class="field-data"
             type="text"
             placeholder="llama-3.1-8b-instant"
             disabled={!config.polish_enabled}
             value={activeProfile.polish_model}
             oninput={(event) => patchActiveProfile({ polish_model: event.currentTarget.value })}
           />
+          <span class="row__hint">Stored on the “{activeProfile.name}” profile.</span>
         {:else}
-          <input class="font-mono" type="text" placeholder="llama-3.1-8b-instant" disabled={!config.polish_enabled} bind:value={config.polish_model} />
+          <input
+            class="field-data"
+            type="text"
+            placeholder="llama-3.1-8b-instant"
+            disabled={!config.polish_enabled}
+            bind:value={config.polish_model}
+          />
         {/if}
-      </label>
+      </span>
+    </label>
 
-      <label class="setting-field" class:opacity-50={!config.polish_enabled}>
-        <span class="flex items-center justify-between gap-3">
-          <span class="setting-field__label">Temperature</span>
-          <span class="font-mono tabular-nums text-xs text-slate-400">{config.temperature.toFixed(2)}</span>
+    <label class="row">
+      <span class="row__label">Latitude</span>
+      <span class="row__control">
+        <span class="slider-head">
+          <span class="row__hint">Higher values let it rephrase more freely.</span>
+          <span class="slider-value">{config.temperature.toFixed(2)}</span>
         </span>
-        <input type="range" min="0" max="1" step="0.05" disabled={!config.polish_enabled} bind:value={config.temperature} />
-        <span class="setting-field__hint">Lower values keep edits more deterministic.</span>
-      </label>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          disabled={!config.polish_enabled}
+          bind:value={config.temperature}
+        />
+      </span>
+    </label>
 
-      <label class="setting-field" class:opacity-50={!config.polish_enabled}>
-        <span class="setting-field__label">Tone hint</span>
-        <textarea rows="3" placeholder="Technical, precise, no filler" disabled={!config.polish_enabled} bind:value={config.tone_hint}></textarea>
-        <span class="setting-field__hint">Optional guidance for how final text should sound.</span>
-      </label>
+    <label class="row">
+      <span class="row__label">Tone</span>
+      <span class="row__control">
+        <textarea
+          rows="3"
+          placeholder="Technical, precise, no filler"
+          disabled={!config.polish_enabled}
+          bind:value={config.tone_hint}
+        ></textarea>
+        <span class="row__hint">How finished text should sound. Optional.</span>
+      </span>
+    </label>
 
-      <div class="setting-row">
-        <span class="setting-row__copy">
-          <strong>Test transcription</strong>
-          <span>Run STT on your last completed dictation.</span>
-        </span>
-        <button type="button" class="bg-sky-500 px-4 text-sm font-medium" disabled={testBusy} onclick={testTranscription}>
-          {testBusy ? "Transcribing…" : "Run test"}
-        </button>
-      </div>
-
-      {#if testResult !== null}
-        <p aria-live="polite" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
-          {testResult || "No speech was detected in the last capture."}
-        </p>
-      {/if}
-      {#if testError}
-        <p role="alert" class="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{testError}</p>
-      {/if}
+    <div class="row row--switch row--flush">
+      <span class="row__copy">
+        <strong>Transcribe the last capture again</strong>
+        <span>Runs your current settings against the audio from your most recent dictation.</span>
+      </span>
+      <button type="button" class="btn" disabled={testBusy} onclick={testTranscription}>
+        {testBusy ? "Transcribing…" : "Run it"}
+      </button>
     </div>
+
+    {#if testResult !== null}
+      <p aria-live="polite" class="note note--ok test-result">
+        {testResult || "No speech in the last capture."}
+      </p>
+    {/if}
+    {#if testError}
+      <p role="alert" class="note note--bad test-result">{testError}</p>
+    {/if}
   </div>
 </section>
+
+<style>
+  .test-result {
+    margin-block-start: var(--space-sm);
+  }
+</style>

@@ -6,8 +6,10 @@
     IconArrowLeft,
     IconArrowRight,
     IconCheck,
+    IconChevronDown,
   } from "@tabler/icons-svelte";
   import type { AppConfig, InputDevice, ProviderPreset } from "$lib/types";
+  import Meter from "./Meter.svelte";
 
   /** Subset of `get_accessibility_status` this wizard reads. */
   interface AccessibilityStatus {
@@ -30,6 +32,9 @@
   const STEPS = ["Welcome", "Microphone", "Provider", "Shortcut", "Try it"] as const;
   let step = $state(0);
 
+  // The Linux build asks the desktop whether a global shortcut can bind at all.
+  // On macOS the equivalent question is whether Accessibility has been granted,
+  // because that one permission gates both the shortcut and typing into apps.
   let accessibility = $state<AccessibilityStatus | null>(null);
   let devices = $state<InputDevice[]>([]);
   let apiKey = $state("");
@@ -119,7 +124,7 @@
       await invoke("set_api_key", { preset: config.provider_preset, key: apiKey.trim() });
       apiKey = "";
       keySaved = true;
-      result = { ok: true, message: "Key saved to your system keyring." };
+      result = { ok: true, message: "Key saved to your Keychain." };
     } catch (error) {
       result = { ok: false, message: `Could not save the key: ${String(error)}` };
     } finally {
@@ -171,6 +176,13 @@
     return keySaved || config.stt_backend === "local_whisper";
   });
 
+  const chordKeys = $derived(
+    config.hotkey
+      .split("+")
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+
   onMount(() => {
     void refreshAccessibility();
     invoke<InputDevice[]>("list_audio_inputs")
@@ -180,56 +192,53 @@
   });
 </script>
 
-<div class="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-12">
-  <!-- Progress -->
-  <ol class="mb-8 flex items-center gap-2" aria-label="Setup progress">
-    {#each STEPS as label, index (label)}
-      <li class="flex flex-1 items-center gap-2">
-        <span
-          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium transition"
-          class:bg-sky-500={index <= step}
-          class:text-white={index <= step}
-          class:bg-white={index > step}
-          class:bg-opacity-10={index > step}
-          class:text-slate-500={index > step}
-        >
-          {#if index < step}
-            <IconCheck aria-hidden="true" size={14} stroke={2.4} />
-          {:else}
-            {index + 1}
-          {/if}
-        </span>
-        <span class="hidden truncate text-xs sm:block" class:text-slate-200={index === step} class:text-slate-600={index !== step}>
-          {label}
-        </span>
-      </li>
-    {/each}
-  </ol>
+<!-- The settings window has no title bar, so onboarding supplies the strip the
+     traffic lights sit in and makes it the handle for moving the window. -->
 
-  <div class="rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl backdrop-blur-xl">
+<div class="setup">
+  <!-- Setup genuinely is a sequence, so it is numbered, and the progress ladder
+       reuses the meter language from the rest of the app. -->
+  <div class="setup__progress">
+    <div class="setup__count">
+      <span class="plate-micro">
+        Step {String(step + 1).padStart(2, "0")} of {String(STEPS.length).padStart(2, "0")}
+      </span>
+    </div>
+    <ol class="ladder" aria-label="Setup progress">
+      {#each STEPS as label, index (label)}
+        <li
+          class="ladder__rung"
+          data-done={index < step}
+          data-now={index === step}
+          aria-current={index === step ? "step" : undefined}
+        >
+          <span class="ladder__name">{label}</span>
+        </li>
+      {/each}
+    </ol>
+  </div>
+
+  <div class="setup__panel">
     {#if step === 0}
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Welcome to Oto</h1>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
-        Hold a shortcut, speak, release. Oto transcribes what you said, optionally cleans it up,
-        and types it into whatever you were using. This takes about a minute to set up.
+      <h1 class="setup__title">Welcome to Oto</h1>
+      <p class="setup__lead">
+        Hold a shortcut, speak, release. Oto writes down what you said, tidies it if you want, and
+        types it into whatever you were using. About a minute to set up.
       </p>
 
       {#if accessibility && !accessibility.trusted}
-        <div class="mt-6 flex items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-5 py-4 text-sm text-amber-50">
-          <span class="mt-0.5 shrink-0 text-amber-300">
-            <IconAlertTriangle aria-hidden="true" size={18} stroke={1.8} />
-          </span>
-          <div class="min-w-0">
-            <p class="font-medium text-amber-100">Accessibility permission is not granted yet</p>
-            <p class="mt-1 text-amber-50/90">
-              macOS needs it before Oto can register a global shortcut or type into other
-              applications. Enable “{accessibility.display_name}” under System Settings → Privacy &
-              Security → Accessibility, then reopen Oto.
-            </p>
-            <div class="mt-3 flex flex-wrap items-center gap-2">
+        <div class="note note--bad setup__note">
+          <IconAlertTriangle aria-hidden="true" size={16} stroke={1.8} />
+          <span>
+            <strong>Accessibility permission has not been granted.</strong>
+            macOS wants it before Oto can register a global shortcut or type into other
+            applications. Turn on <span class="readout-tight">{accessibility.display_name}</span>
+            under System Settings → Privacy &amp; Security → Accessibility. You can still dictate
+            from the menu bar, and setup will carry on either way.
+            <span class="btn-row setup__grant">
               <button
                 type="button"
-                class="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-amber-50 transition hover:bg-white/15 disabled:opacity-50"
+                class="btn btn--small"
                 disabled={busy !== null}
                 onclick={() => void grantAccessibility()}
               >
@@ -237,240 +246,249 @@
               </button>
               <button
                 type="button"
-                class="rounded-lg px-2 py-1.5 text-xs text-amber-100/70 transition hover:text-amber-50"
+                class="btn btn--quiet btn--small"
                 onclick={() => void refreshAccessibility()}
               >
                 Re-check
               </button>
-            </div>
-            <p class="mt-2 text-amber-50/70">
-              You can still dictate from the menu bar. Setup will continue either way.
-            </p>
-          </div>
+            </span>
+          </span>
         </div>
       {:else if accessibility}
-        <p class="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 px-5 py-3 text-xs text-emerald-100/90">
+        <p class="note note--ok setup__note">
           Accessibility is granted for
-          <code class="rounded bg-white/5 px-1 font-mono">{accessibility.display_name}</code>.
-          Global shortcuts and typing into other applications will work.
+          <span class="readout-tight">{accessibility.display_name}</span>. Your shortcut will bind
+          and Oto can type into other applications.
         </p>
       {/if}
 
-      <label class="mt-6 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/40 px-5 py-4">
-        <span>
-          <span class="block text-sm font-medium text-slate-200">Play sound cues</span>
-          <span class="block text-xs text-slate-500">
-            A short tone when recording starts and stops. Handy while you learn the shortcut.
-          </span>
+      <label class="row row--switch row--flush setup__row">
+        <span class="row__copy">
+          <strong>Play sound cues</strong>
+          <span>A short tone when recording starts and stops. Useful while the shortcut is new.</span>
         </span>
-        <input type="checkbox" class="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900 text-sky-500" bind:checked={config.sounds.enabled} />
+        <input type="checkbox" bind:checked={config.sounds.enabled} />
       </label>
 
     {:else if step === 1}
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Choose a microphone</h1>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
-        Oto follows your system default unless you pick something specific.
+      <h1 class="setup__title">Choose a microphone</h1>
+      <p class="setup__lead">
+        Oto follows your system default unless you name something specific here.
       </p>
 
-      <label class="mt-6 block space-y-2">
-        <span class="text-sm font-medium text-slate-300">Input device</span>
-        <select
-          class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-400/50"
-          value={config.audio.input_device ?? ""}
-          onchange={(event) => (config.audio.input_device = event.currentTarget.value || null)}
-        >
-          <option value="">System default</option>
-          {#each devices as device (device.name)}
-            <option value={device.name}>{device.name}{device.is_default ? " — default" : ""}</option>
-          {/each}
-        </select>
+      <label class="field setup__field">
+        <span class="plate-micro field__label">Input device</span>
+        <div class="select-wrap">
+          <select
+            value={config.audio.input_device ?? ""}
+            onchange={(event) => (config.audio.input_device = event.currentTarget.value || null)}
+          >
+            <option value="">System default</option>
+            {#each devices as device (device.name)}
+              <option value={device.name}>
+                {device.name}{device.is_default ? " — default" : ""}
+              </option>
+            {/each}
+          </select>
+          <IconChevronDown aria-hidden="true" size={14} stroke={1.7} />
+        </div>
       </label>
+
+      <div class="setup__bench">
+        <div class="setup__bench-head">
+          <span class="plate-micro">Live input</span>
+        </div>
+        <Meter segments={32} variant="tall" />
+      </div>
 
       <button
         type="button"
-        class="mt-5 rounded-xl bg-white/10 px-4 py-2.5 text-sm text-slate-100 transition hover:bg-white/15 disabled:opacity-50"
+        class="btn setup__action"
         disabled={busy !== null}
         onclick={() => void run("test_microphone", "Microphone test")}
       >
-        {busy === "test_microphone" ? "Listening for two seconds…" : "Test microphone"}
+        {busy === "test_microphone" ? "Listening for two seconds…" : "Test the microphone"}
       </button>
-      <p class="mt-2 text-xs text-slate-500">
-        Speak while the overlay shows a waveform. If the bars stay flat, pick a different device.
+      <p class="setup__hint">
+        Speak while the test runs. If the ladder above stays dark, choose a different device — and
+        if macOS has not asked for the microphone yet, the first test is what prompts it.
       </p>
 
     {:else if step === 2}
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Connect a provider</h1>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
-        Oto needs a speech-to-text service. Your key is stored in the system keyring, never in the
-        config file.
+      <h1 class="setup__title">Connect a provider</h1>
+      <p class="setup__lead">
+        Oto needs a service to turn speech into text. Your key goes to the macOS Keychain, never
+        into a configuration file.
       </p>
 
-      <div class="mt-6 space-y-2">
+      <div class="choice-list setup__choices">
         {#each PRESETS as preset (preset.value)}
           <button
             type="button"
-            class="flex w-full items-start gap-3 rounded-2xl border px-5 py-4 text-left transition"
-            class:border-sky-400={config.provider_preset === preset.value}
-            class:bg-sky-400={config.provider_preset === preset.value}
-            class:bg-opacity-10={config.provider_preset === preset.value}
-            class:border-white={config.provider_preset !== preset.value}
-            class:border-opacity-10={config.provider_preset !== preset.value}
+            class="choice"
+            data-active={config.provider_preset === preset.value}
             onclick={() => choosePreset(preset)}
           >
-            <span class="min-w-0">
-              <span class="block text-sm font-medium text-slate-100">{preset.name}</span>
-              <span class="block text-xs text-slate-500">{preset.detail}</span>
+            <span class="choice__copy">
+              <strong>{preset.name}</strong>
+              <span>{preset.detail}</span>
             </span>
           </button>
         {/each}
       </div>
 
-      <div class="mt-5 flex gap-2">
+      <div class="btn-row setup__key">
         <input
           type="password"
+          class="field-data setup__key-input"
           autocomplete="off"
-          placeholder={keySaved ? "A key is already saved — enter one to replace it" : "Paste your API key"}
-          class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-400/50"
+          aria-label="API key"
+          placeholder={keySaved ? "Enter a new key to replace the saved one" : "Paste your API key"}
           bind:value={apiKey}
         />
         <button
           type="button"
-          class="shrink-0 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-sky-400 disabled:opacity-50"
+          class="btn btn--primary"
           disabled={!apiKey.trim() || busy !== null}
           onclick={() => void saveKey()}
         >
           Save
         </button>
       </div>
+
       {#if keySaved}
-        <p class="mt-2 flex items-center gap-1.5 text-xs text-emerald-300">
-          <IconCheck aria-hidden="true" size={14} stroke={2.2} /> Key stored in the keyring.
+        <p class="setup__hint status-ok">
+          <IconCheck aria-hidden="true" size={14} stroke={2.2} />
+          Stored in the Keychain.
         </p>
       {/if}
-      <p class="mt-3 text-xs leading-relaxed text-slate-500">
-        Prefer to stay offline? Skip this and choose <strong class="text-slate-400">Models → Local
-        Whisper</strong> later — Oto then never sends audio anywhere.
+
+      <p class="setup__hint">
+        Would rather stay offline? Skip this and pick <strong>Models → On this machine</strong>
+        later. Oto then never sends your audio anywhere.
       </p>
 
     {:else if step === 3}
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Pick your shortcut</h1>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
-        Avoid chords macOS or your apps already use. <code class="rounded bg-white/5 px-1 font-mono">Ctrl+Shift+…</code>
-        is usually free; ⌘-based chords rarely are.
+      <h1 class="setup__title">Pick your shortcut</h1>
+      <p class="setup__lead">
+        Steer clear of chords macOS or your apps already own.
+        <span class="readout-tight">Ctrl+Shift+…</span> is usually free; ⌘ chords rarely are.
       </p>
 
-      <label class="mt-6 block space-y-2">
-        <span class="text-sm font-medium text-slate-300">Dictation shortcut</span>
-        <input
-          type="text"
-          spellcheck="false"
-          autocomplete="off"
-          class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-sky-400/50"
-          bind:value={config.hotkey}
-        />
+      <label class="field setup__field">
+        <span class="plate-micro field__label">Dictation chord</span>
+        <input type="text" class="field-data" spellcheck="false" autocomplete="off" bind:value={config.hotkey} />
+        {#if chordKeys.length}
+          <span class="keys" aria-hidden="true">
+            {#each chordKeys as key, index (index)}
+              {#if index > 0}<span class="keys__join">+</span>{/if}
+              <kbd class="key">{key}</kbd>
+            {/each}
+          </span>
+        {/if}
       </label>
 
-      <fieldset class="mt-6 space-y-2">
-        <legend class="text-sm font-medium text-slate-300">How it activates</legend>
-        {#each [
-          { value: "hold", title: "Hold to talk", detail: "Hold while speaking, release to transcribe." },
-          { value: "toggle", title: "Toggle", detail: "Press once to start, once to stop." },
-          { value: "hybrid", title: "Hybrid", detail: "Tap for hands-free, hold for push-to-talk." },
-        ] as const as option (option.value)}
-          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3">
-            <input
-              type="radio"
-              name="onboarding-activation"
-              value={option.value}
-              class="mt-0.5 h-4 w-4 shrink-0 border-white/20 bg-slate-900 text-sky-500"
-              bind:group={config.activation_mode}
-            />
-            <span class="min-w-0">
-              <span class="block text-sm text-slate-200">{option.title}</span>
-              <span class="block text-xs text-slate-500">{option.detail}</span>
-            </span>
-          </label>
-        {/each}
-      </fieldset>
+      <div class="setup__field" role="radiogroup" aria-label="How it activates">
+        <span class="plate-micro field__label">How it activates</span>
+        <div class="choice-list">
+          {#each [
+            { value: "hold", title: "Hold to talk", detail: "Hold while speaking, release to transcribe." },
+            { value: "toggle", title: "Toggle", detail: "Press once to start, once to stop." },
+            { value: "hybrid", title: "Hybrid", detail: "Tap for hands free, hold for push-to-talk." },
+          ] as const as option (option.value)}
+            <label class="choice" data-active={config.activation_mode === option.value}>
+              <input
+                type="radio"
+                name="onboarding-activation"
+                value={option.value}
+                bind:group={config.activation_mode}
+              />
+              <span class="choice__copy">
+                <strong>{option.title}</strong>
+                <span>{option.detail}</span>
+              </span>
+            </label>
+          {/each}
+        </div>
+      </div>
 
     {:else}
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Try it out</h1>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
-        These run the real pipeline. If both pass, you are ready.
+      <h1 class="setup__title">Try it out</h1>
+      <p class="setup__lead">
+        These run the real thing, in order. If all three pass, you are set.
       </p>
 
-      <div class="mt-6 space-y-2">
-        <button
-          type="button"
-          class="w-full rounded-xl bg-white/10 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/15 disabled:opacity-50"
-          disabled={busy !== null}
-          onclick={() => void run("test_microphone", "Microphone test")}
-        >
-          <span class="block font-medium">1 · Record two seconds</span>
-          <span class="block text-xs text-slate-500">Checks that Oto can hear you.</span>
-        </button>
-        <button
-          type="button"
-          class="w-full rounded-xl bg-white/10 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/15 disabled:opacity-50"
-          disabled={busy !== null}
-          onclick={() => void run("test_transcription", "Transcription test")}
-        >
-          <span class="block font-medium">2 · Transcribe that recording</span>
-          <span class="block text-xs text-slate-500">Checks your provider and key.</span>
-        </button>
-        <button
-          type="button"
-          class="w-full rounded-xl bg-white/10 px-4 py-3 text-left text-sm text-slate-100 transition hover:bg-white/15 disabled:opacity-50"
-          disabled={busy !== null}
-          onclick={() => void run("test_injection", "Insertion test")}
-        >
-          <span class="block font-medium">3 · Type into another window</span>
-          <span class="block text-xs text-slate-500">
-            Focus a text field in another app within a couple of seconds after pressing this.
-          </span>
-        </button>
+      <div class="checks">
+        {#each [
+          {
+            command: "test_microphone",
+            label: "Microphone test",
+            title: "Record two seconds",
+            detail: "Checks that Oto can hear you.",
+          },
+          {
+            command: "test_transcription",
+            label: "Transcription test",
+            title: "Write down that recording",
+            detail: "Checks your provider and your key.",
+          },
+          {
+            command: "test_injection",
+            label: "Insertion test",
+            title: "Type into another window",
+            detail: "Click into a text field in another app within a couple of seconds of starting this.",
+          },
+        ] as check, index (check.command)}
+          <button
+            type="button"
+            class="check"
+            disabled={busy !== null}
+            onclick={() => void run(check.command, check.label)}
+          >
+            <span class="plate-micro check__index">{String(index + 1).padStart(2, "0")}</span>
+            <span class="check__copy">
+              <strong>{check.title}</strong>
+              <span>{check.detail}</span>
+            </span>
+            <span class="check__state">{busy === check.command ? "Running…" : "Run"}</span>
+          </button>
+        {/each}
       </div>
     {/if}
 
     {#if result}
       <p
         aria-live="polite"
-        class="mt-5 rounded-xl px-4 py-3 text-sm leading-relaxed {result.ok
-          ? 'border border-emerald-400/25 bg-emerald-400/5 text-emerald-100'
-          : 'border border-rose-400/25 bg-rose-400/5 text-rose-100'}"
+        class="note setup__note"
+        class:note--ok={result.ok}
+        class:note--bad={!result.ok}
       >
         {result.message}
       </p>
     {/if}
   </div>
 
-  <div class="mt-6 flex items-center justify-between gap-4">
-    <button
-      type="button"
-      class="text-xs text-slate-500 transition hover:text-slate-300"
-      onclick={() => void skip()}
-    >
-      Skip setup
-    </button>
+  <div class="setup__foot">
+    <button type="button" class="btn-link" onclick={() => void skip()}>Skip setup</button>
 
-    <div class="flex items-center gap-2">
+    <div class="btn-row">
       {#if step > 0}
         <button
           type="button"
-          class="flex items-center gap-1.5 rounded-xl bg-white/10 px-4 py-2.5 text-sm text-slate-100 transition hover:bg-white/15"
+          class="btn"
           onclick={() => {
             step -= 1;
             result = null;
           }}
         >
-          <IconArrowLeft aria-hidden="true" size={16} stroke={1.8} />
+          <IconArrowLeft aria-hidden="true" size={15} stroke={1.8} />
           Back
         </button>
       {/if}
       {#if step < STEPS.length - 1}
         <button
           type="button"
-          class="flex items-center gap-1.5 rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-sky-400 disabled:opacity-40"
+          class="btn btn--primary"
           disabled={!canAdvance}
           onclick={() => {
             step += 1;
@@ -478,15 +496,10 @@
           }}
         >
           Next
-          <IconArrowRight aria-hidden="true" size={16} stroke={1.8} />
+          <IconArrowRight aria-hidden="true" size={15} stroke={1.8} />
         </button>
       {:else}
-        <button
-          type="button"
-          class="rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-sky-400 disabled:opacity-50"
-          disabled={busy !== null}
-          onclick={() => void finish()}
-        >
+        <button type="button" class="btn btn--primary" disabled={busy !== null} onclick={() => void finish()}>
           Finish
         </button>
       {/if}
@@ -494,8 +507,243 @@
   </div>
 
   {#if step === 2 && !canAdvance}
-    <p class="mt-3 text-right text-xs text-slate-500">
-      Save a key to continue, or skip setup and configure a local model later.
+    <p class="setup__hint setup__hint--end">
+      Save a key to carry on, or skip setup and choose a local model later.
     </p>
   {/if}
 </div>
+
+<style>
+  .setup {
+    display: flex;
+    max-width: 44rem;
+    /* The shell already reserves the traffic-light strip above us, so the column
+       takes what is left of the viewport instead of forcing a scrollbar. */
+    min-height: calc(100dvh - var(--mac-titlebar));
+    flex-direction: column;
+    justify-content: center;
+    margin-inline: auto;
+    padding: var(--space-xl) var(--space-md);
+  }
+
+  .setup__progress {
+    display: grid;
+    gap: 0.5rem;
+    margin-block-end: var(--space-lg);
+  }
+
+  .setup__count {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    color: var(--faint);
+  }
+
+  .ladder {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: 3px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ladder__rung {
+    display: grid;
+    gap: 0.375rem;
+  }
+
+  /* The rung itself is the bar; the label sits under it on wider screens. */
+  .ladder__rung::before {
+    height: 3px;
+    border-radius: 1px;
+    background: var(--etch);
+    content: "";
+    transition: background-color var(--dur-throw) var(--ease-lamp);
+  }
+
+  .ladder__rung[data-done="true"]::before {
+    background: var(--lamp-deep);
+  }
+
+  .ladder__rung[data-now="true"]::before {
+    background: var(--lamp);
+  }
+
+  .ladder__name {
+    display: none;
+    overflow: hidden;
+    color: var(--faint);
+    font-size: var(--text-micro);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ladder__rung[data-now="true"] .ladder__name {
+    color: var(--ink-2);
+  }
+
+  .setup__panel {
+    padding: var(--space-lg);
+    border: var(--rule) solid var(--etch);
+    border-radius: var(--radius-panel);
+    background: var(--panel);
+  }
+
+  .setup__title {
+    color: var(--ink);
+    font-family: var(--font-plate);
+    font-stretch: var(--plate-width);
+    font-size: var(--text-lg);
+    font-weight: 650;
+    line-height: 1.15;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .setup__lead {
+    max-width: 58ch;
+    margin-block-start: 0.625rem;
+    color: var(--muted);
+    font-size: var(--text-base);
+    line-height: 1.55;
+  }
+
+  .setup__note {
+    margin-block-start: var(--space-md);
+  }
+
+  /* The two Accessibility controls hang under the warning copy, not beside it. */
+  .setup__grant {
+    margin-block-start: 0.5rem;
+  }
+
+  .setup__row,
+  .setup__field,
+  .setup__choices,
+  .setup__key,
+  .setup__bench {
+    margin-block-start: var(--space-md);
+  }
+
+  .setup__action {
+    margin-block-start: var(--space-md);
+  }
+
+  .setup__bench {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 0.875rem 0.875rem;
+    border: var(--rule) solid var(--etch);
+    border-radius: var(--radius-panel);
+    background: var(--well);
+  }
+
+  .setup__bench-head {
+    color: var(--faint);
+  }
+
+  .setup__key {
+    flex-wrap: nowrap;
+  }
+
+  .setup__key-input {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .setup__hint {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: 62ch;
+    margin-block-start: 0.5rem;
+    color: var(--muted);
+    font-size: var(--text-xs);
+    line-height: 1.55;
+  }
+
+  .setup__hint--end {
+    justify-content: flex-end;
+    margin-block-start: var(--space-sm);
+  }
+
+  .setup__hint strong {
+    color: var(--ink-2);
+    font-weight: 560;
+  }
+
+  .checks {
+    display: grid;
+    gap: 2px;
+    margin-block-start: var(--space-md);
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6875rem 0.75rem;
+    border: var(--rule) solid var(--etch);
+    border-radius: var(--radius-control);
+    background: var(--chassis);
+    text-align: start;
+    transition: border-color var(--dur-tick) var(--ease-mech);
+  }
+
+  .check:not(:disabled):hover {
+    border-color: var(--etch-strong);
+  }
+
+  .check:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .check__index {
+    flex: 0 0 auto;
+    color: var(--faint);
+  }
+
+  .check__copy {
+    display: grid;
+    gap: 0.125rem;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .check__copy strong {
+    color: var(--ink-2);
+    font-size: var(--text-sm);
+    font-weight: 560;
+  }
+
+  .check__copy span {
+    color: var(--muted);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+  }
+
+  .check__state {
+    flex: 0 0 auto;
+    color: var(--lamp-text);
+    font-size: var(--text-xs);
+    font-weight: 540;
+  }
+
+  .setup__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin-block-start: var(--space-md);
+  }
+
+  @media (min-width: 34rem) {
+    .ladder__name {
+      display: block;
+    }
+  }
+</style>
